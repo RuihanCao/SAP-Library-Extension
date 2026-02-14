@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SAP Library Sync</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      body {
+        margin: 0;
+        width: 340px;
+        font: 13px/1.45 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+
+      main {
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .card {
+        background: #ffffff;
+        border: 1px solid #dbe2ea;
+        border-radius: 10px;
+        padding: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .sub {
+        margin: 4px 0 0;
+        color: #475569;
+      }
+
+      .status-pill {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 12px;
+      }
+
+      .status-ready,
+      .status-synced,
+      .status-queued {
+        background: #e0f2fe;
+        color: #075985;
+      }
+
+      .status-uploading {
+        background: #ede9fe;
+        color: #5b21b6;
+      }
+
+      .status-error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .metric {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px;
+      }
+
+      .metric-label {
+        font-size: 11px;
+        color: #64748b;
+      }
+
+      .metric-value {
+        margin-top: 2px;
+        font-size: 17px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .line {
+        margin-top: 8px;
+        color: #334155;
+      }
+
+      .line strong {
+        color: #0f172a;
+      }
+
+      .actions {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .actions-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      button {
+        flex: 1;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #ffffff;
+        border-radius: 8px;
+        padding: 8px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        border-color: #cbd5e1;
+        background: #ffffff;
+        color: #0f172a;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+
+      .note {
+        color: #475569;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>SAP Library Sync</h1>
+        <p class="sub">Finished games are uploaded automatically.</p>
+      </section>
+
+      <section class="card">
+        <span id="syncStatus" class="status-pill status-ready">Waiting</span>
+
+        <div class="metrics" style="margin-top: 10px;">
+          <div class="metric">
+            <div class="metric-label">Pending</div>
+            <div id="pendingCount" class="metric-value">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Uploaded</div>
+            <div id="uploadedCount" class="metric-value">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Errors</div>
+            <div id="failedCount" class="metric-value">0</div>
+          </div>
+        </div>
+        <div id="lastSyncLine" class="line"><strong>Last Sync:</strong> none yet</div>
+        <div id="statusMessage" class="line">Open SAP and play or view history.</div>
+
+        <div class="actions">
+          <div class="actions-row">
+            <button id="retryNow" type="button">Retry Upload</button>
+          </div>
+          <div class="actions-row">
+            <button id="openProfile" type="button" class="secondary" disabled>Open My Profile</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

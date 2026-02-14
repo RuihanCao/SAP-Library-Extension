@@ -1,0 +1,55 @@
+{
+  "name": "SAP Library Uploader",
+  "description": "Capture finished SAP participation IDs and upload them to SAP Library.",
+  "version": "0.2.0",
+  "manifest_version": 3,
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://sap-library.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "action": {
+    "default_title": "SAP Library Uploader",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon.png",
+      "32": "icons/icon.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon.png",
+    "32": "icons/icon.png",
+    "48": "icons/icon.png",
+    "128": "icons/icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://teamwood.itch.io/*",
+        "https://superautopets.com/*",
+        "https://*.superautopets.com/*"
+      ],
+      "js": [
+        "content_script.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "page_hook.js"
+      ],
+      "matches": [
+        "https://teamwood.itch.io/*",
+        "https://superautopets.com/*",
+        "https://*.superautopets.com/*"
+      ]
+    }
+  ]
+}
