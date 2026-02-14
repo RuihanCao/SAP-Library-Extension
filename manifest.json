@@ -29,9 +29,9 @@
   "content_scripts": [
     {
       "matches": [
-        "https://teamwood.itch.io/*",
-        "https://superautopets.com/*",
-        "https://*.superautopets.com/*"
+        "*://html-classic.itch.zone/*",
+        "*://teamwood.itch.io/*",
+        "*://v6p9d9t4.ssl.hwcdn.net/*"
       ],
       "js": [
         "content_script.js"
@@ -46,9 +46,9 @@
         "page_hook.js"
       ],
       "matches": [
-        "https://teamwood.itch.io/*",
-        "https://superautopets.com/*",
-        "https://*.superautopets.com/*"
+        "*://html-classic.itch.zone/*",
+        "*://teamwood.itch.io/*",
+        "*://v6p9d9t4.ssl.hwcdn.net/*"
       ]
     }
   ]
