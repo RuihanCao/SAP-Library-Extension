@@ -198,7 +198,7 @@
       if (parsed !== null) {
         return parsed;
       }
-      throw new Error("Could not decode SAPC1 export text.");
+      throw new Error("Could not decode SAPC1 export text. Try refreshing the page.");
     }
 
     const direct = tryParseJsonCandidate(text);
@@ -387,7 +387,11 @@
 
     const attack = Math.max(0, Math.round(toFiniteNumber(rawPet.attack, 1)));
     const health = Math.max(1, Math.round(toFiniteNumber(rawPet.health, 1)));
+    const perkName = getEquipmentName(rawPet);
     const perkId = resolvePerkId(rawPet);
+    if (perkName && !Number.isFinite(perkId)) {
+      warningBag.missingPerkMap.push(String(perkName));
+    }
 
     const abilityMap = maps?.abilityIdsByPetId || {};
     const abilityMapKey = String(petId);
@@ -466,13 +470,16 @@
     displayLabel,
     unknownWarnings,
     missingAbilityWarnings,
+    missingPerkWarnings,
+    unknownPackWarnings,
     options = {}
   ) {
     const reverseInputOrder = Boolean(options.reverseInputOrder);
     const items = new Array(5).fill(null);
     const warningBag = {
       unknownPets: [],
-      missingAbilityMap: []
+      missingAbilityMap: [],
+      missingPerkMap: []
     };
 
     for (let i = 0; i < 5; i += 1) {
@@ -483,8 +490,14 @@
 
     unknownWarnings.push(...warningBag.unknownPets);
     missingAbilityWarnings.push(...warningBag.missingAbilityMap);
+    missingPerkWarnings.push(...warningBag.missingPerkMap);
 
     const petEnums = items.filter(Boolean).map((minion) => minion.Enu);
+    const packKey = normalizeLookupKey(packName);
+    const hasPackMapping = Number.isFinite(maps?.packIdsByName?.[packKey]);
+    if (packName && !hasPackMapping) {
+      unknownPackWarnings.push(String(packName));
+    }
     const packId = resolvePackId(packName);
 
     return {
@@ -571,6 +584,8 @@
 
     const unknownWarnings = [];
     const missingAbilityWarnings = [];
+    const missingPerkWarnings = [];
+    const unknownPackWarnings = [];
 
     const userBoardId = randomUuid();
     const opponentBoardId = randomUuid();
@@ -593,6 +608,8 @@
         "Calculator",
         unknownWarnings,
         missingAbilityWarnings,
+        missingPerkWarnings,
+        unknownPackWarnings,
         { reverseInputOrder: true }
       ),
       Opponent: {
@@ -606,6 +623,8 @@
         "Opponent",
         unknownWarnings,
         missingAbilityWarnings,
+        missingPerkWarnings,
+        unknownPackWarnings,
         { reverseInputOrder: true }
       ),
       EndResult: randomHash()
@@ -619,7 +638,9 @@
       },
       warnings: {
         unknownPets: uniqueStrings(unknownWarnings),
-        missingAbilityMap: uniqueStrings(missingAbilityWarnings)
+        missingAbilityMap: uniqueStrings(missingAbilityWarnings),
+        missingPerkMap: uniqueStrings(missingPerkWarnings),
+        missingPackMap: uniqueStrings(unknownPackWarnings)
       }
     };
   }
@@ -791,6 +812,12 @@
     }
     if (warnings.missingAbilityMap.length > 0) {
       parts.push(`Ability map missing: ${warnings.missingAbilityMap.slice(0, 4).join(", ")}${warnings.missingAbilityMap.length > 4 ? "..." : ""}`);
+    }
+    if (warnings.missingPerkMap.length > 0) {
+      parts.push(`Perk map missing: ${warnings.missingPerkMap.slice(0, 4).join(", ")}${warnings.missingPerkMap.length > 4 ? "..." : ""}`);
+    }
+    if (warnings.missingPackMap.length > 0) {
+      parts.push(`Pack map missing: ${warnings.missingPackMap.slice(0, 4).join(", ")}${warnings.missingPackMap.length > 4 ? "..." : ""}`);
     }
     return parts.join(" | ");
   }

@@ -57,6 +57,25 @@ You can now export directly from [SAP Calculator](https://www.sap-calculator.com
 Notes:
 - Unknown pet names are skipped.
 - If a pet has no known ability mapping in `calculator_maps.js`, it is still added but without explicit ability enums.
+- If an equipment/perk name has no mapping, it is reported in the conversion status.
+- If a pack name has no mapping, it is reported in the conversion status and falls back to Turtle (`Pack: 0`).
+
+### Calculator map sources (local only)
+
+`calculator_maps.js` is generated from local files inside this repo:
+
+- `map_sources/replay_bot/pets.json`
+- `map_sources/replay_bot/perks.json`
+- `map_sources/replay_editor/animals.json`
+- `map_sources/replay_editor/abilities.json`
+- `map_sources/replay_editor/perks.json`
+- `map_sources/replay_editor/backgrounds.json`
+
+Regenerate after source updates:
+
+```bash
+node scripts/generate_calculator_maps.js
+```
 
 ## Target URL
 
