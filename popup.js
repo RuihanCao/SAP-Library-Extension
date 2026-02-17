@@ -6,6 +6,10 @@
     failedCount: document.getElementById("failedCount"),
     lastSyncLine: document.getElementById("lastSyncLine"),
     statusMessage: document.getElementById("statusMessage"),
+    sapEmail: document.getElementById("sapEmail"),
+    sapPassword: document.getElementById("sapPassword"),
+    showPasswordToggle: document.getElementById("showPasswordToggle"),
+    syncHistory: document.getElementById("syncHistory"),
     retryNow: document.getElementById("retryNow"),
     openProfile: document.getElementById("openProfile")
   };
@@ -13,6 +17,7 @@
   let refreshTimer = null;
   let busy = false;
   let latestState = null;
+  let hasHydratedSavedCredentials = false;
 
   async function sendMessage(message) {
     return chrome.runtime.sendMessage(message);
@@ -25,9 +30,64 @@
     return date.toLocaleString();
   }
 
+  function buildFallbackState() {
+    return latestState || {
+      syncState: "ready",
+      counts: { pending: 0, uploaded: 0, failed: 0 },
+      playerId: null,
+      savedSapEmail: null,
+      savedSapPassword: null,
+      hasSavedSapPassword: false,
+      historySyncLast: null,
+      lastUpload: null
+    };
+  }
+
+  function renderTransientError(message, extraState) {
+    const fallbackState = buildFallbackState();
+    renderState({
+      ...fallbackState,
+      ...(extraState || {}),
+      syncState: "needs_retry",
+      lastUpload: {
+        ok: false,
+        attempted: 0,
+        uploaded: 0,
+        at: new Date().toISOString(),
+        error: message
+      }
+    });
+  }
+
   function setBusy(value) {
     busy = Boolean(value);
     els.retryNow.disabled = busy;
+    els.syncHistory.disabled = busy;
+    els.sapEmail.disabled = busy;
+    els.sapPassword.disabled = busy;
+    els.showPasswordToggle.disabled = busy;
+  }
+
+  function applyPasswordVisibility() {
+    els.sapPassword.type = els.showPasswordToggle.checked ? "text" : "password";
+  }
+
+  function hydrateSavedCredentialsOnce(state) {
+    if (hasHydratedSavedCredentials) {
+      return;
+    }
+
+    const savedEmail = typeof state?.savedSapEmail === "string" ? state.savedSapEmail : "";
+    const savedPassword = typeof state?.savedSapPassword === "string" ? state.savedSapPassword : "";
+
+    if (savedEmail && !els.sapEmail.value) {
+      els.sapEmail.value = savedEmail;
+    }
+    if (savedPassword && !els.sapPassword.value) {
+      els.sapPassword.value = savedPassword;
+    }
+
+    hasHydratedSavedCredentials = true;
   }
 
   function renderSyncBadge(syncState) {
@@ -73,6 +133,11 @@
 
     if (state.syncState === "needs_retry") {
       const reason = lastUpload?.error || "Upload failed";
+      const reasonLower = String(reason).toLowerCase();
+      if (reasonLower.includes("history") || reasonLower.includes("sap login") || reasonLower.includes("email") || reasonLower.includes("password")) {
+        els.statusMessage.textContent = reason;
+        return;
+      }
       els.statusMessage.textContent = `Upload failed: ${reason}. Click Retry Upload.`;
       return;
     }
@@ -87,19 +152,40 @@
       return;
     }
 
-    els.statusMessage.textContent = "Open SAP and play or view history.";
+    els.statusMessage.textContent = "Open SAP and play or use Sync History with credentials.";
+  }
+
+  function getTsMs(ts) {
+    if (!ts) return Number.NEGATIVE_INFINITY;
+    const ms = new Date(ts).getTime();
+    return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
   }
 
   function renderLastSync(state) {
     const lastUpload = state.lastUpload;
-    if (!lastUpload) {
+    const history = state?.historySyncLast || null;
+
+    if (!lastUpload && !history) {
       els.lastSyncLine.innerHTML = "<strong>Last Sync:</strong> none yet";
       return;
     }
 
-    const label = lastUpload.ok ? "Success" : "Failed";
-    const detail = `attempted ${lastUpload.attempted || 0}, uploaded ${lastUpload.uploaded || 0}`;
-    els.lastSyncLine.innerHTML = `<strong>Last Sync:</strong> ${label} at ${formatTs(lastUpload.at)} (${detail})`;
+    const uploadAt = getTsMs(lastUpload?.at);
+    const historyAt = getTsMs(history?.at);
+
+    if (history && historyAt >= uploadAt) {
+      if (history.ok) {
+        const detail = `fetched ${history.fetched || 0}, finished ${history.finished || 0}, added ${history.added || 0}`;
+        els.lastSyncLine.innerHTML = `<strong>Last Sync:</strong> History success at ${formatTs(history.at)} (${detail})`;
+      } else {
+        els.lastSyncLine.innerHTML = `<strong>Last Sync:</strong> History failed at ${formatTs(history.at)} (${history.error || "unknown error"})`;
+      }
+      return;
+    }
+
+    const label = lastUpload?.ok ? "Success" : "Failed";
+    const detail = `attempted ${lastUpload?.attempted || 0}, uploaded ${lastUpload?.uploaded || 0}`;
+    els.lastSyncLine.innerHTML = `<strong>Last Sync:</strong> ${label} at ${formatTs(lastUpload?.at)} (${detail})`;
   }
 
   function renderProfileAvailability(state) {
@@ -115,6 +201,8 @@
     els.uploadedCount.textContent = String(counts.uploaded || 0);
     els.failedCount.textContent = String(counts.failed || 0);
 
+    hydrateSavedCredentialsOnce(state);
+
     renderSyncBadge(state?.syncState || "ready");
     renderProfileAvailability(state || {});
     renderLastSync(state || {});
@@ -129,18 +217,7 @@
       }
       renderState(response.state);
     } catch (error) {
-      renderState({
-        syncState: "needs_retry",
-        counts: { pending: 0, uploaded: 0, failed: 0 },
-        playerId: null,
-        lastUpload: {
-          ok: false,
-          attempted: 0,
-          uploaded: 0,
-          at: new Date().toISOString(),
-          error: error.message
-        }
-      });
+      renderTransientError(error.message);
     }
   }
 
@@ -161,18 +238,41 @@
         await refreshState();
       }
     } catch (error) {
-      renderState({
-        syncState: "needs_retry",
-        counts: { pending: 0, uploaded: 0, failed: 0 },
-        playerId: null,
-        lastUpload: {
-          ok: false,
-          attempted: 0,
-          uploaded: 0,
-          at: new Date().toISOString(),
-          error: error.message
-        }
+      renderTransientError(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncHistoryNow() {
+    if (busy) {
+      return;
+    }
+
+    const email = typeof els.sapEmail.value === "string" ? els.sapEmail.value.trim() : "";
+    const password = typeof els.sapPassword.value === "string" ? els.sapPassword.value.trim() : "";
+
+    setBusy(true);
+    try {
+      const response = await sendMessage({
+        type: "sync_history_with_credentials",
+        email,
+        password
       });
+
+      if (!response || !response.ok) {
+        const message = response?.error || response?.summary?.error || "History sync failed";
+        renderTransientError(message, response?.state || null);
+        return;
+      }
+
+      if (response.state) {
+        renderState(response.state);
+      } else {
+        await refreshState();
+      }
+    } catch (error) {
+      renderTransientError(error.message);
     } finally {
       setBusy(false);
     }
@@ -201,6 +301,12 @@
   }
 
   function bindEvents() {
+    els.syncHistory.addEventListener("click", () => {
+      void syncHistoryNow();
+    });
+    els.showPasswordToggle.addEventListener("change", () => {
+      applyPasswordVisibility();
+    });
     els.retryNow.addEventListener("click", () => {
       void retryUploadNow();
     });
@@ -211,6 +317,7 @@
 
   async function init() {
     bindEvents();
+    applyPasswordVisibility();
     await refreshState();
 
     refreshTimer = window.setInterval(() => {

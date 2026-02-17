@@ -4,12 +4,22 @@ const STORAGE_KEYS = {
   failed: "slx_failed",
   lastUpload: "slx_last_upload",
   retryRequired: "slx_retry_required",
-  playerId: "slx_player_id"
+  playerId: "slx_player_id",
+  historySyncLast: "slx_history_sync_last",
+  sapApiVersion: "slx_sap_api_version",
+  savedSapEmail: "slx_saved_sap_email",
+  savedSapPassword: "slx_saved_sap_password"
+};
+
+const LEGACY_STORAGE_KEYS = {
+  autoHistorySyncEmail: "slx_auto_history_sync_email",
+  autoHistorySyncPassword: "slx_auto_history_sync_password"
 };
 
 const TARGET_BASE_URL = "https://sap-library.vercel.app";
 const UPLOAD_BATCH_SIZE = 25;
 const MAX_UPLOADED_IDS = 5000;
+const DEFAULT_SAP_API_VERSION = "45";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -27,6 +37,7 @@ function storageSet(values) {
   });
 }
 
+
 function normalizeUuid(value) {
   if (value === null || value === undefined) {
     return null;
@@ -42,6 +53,19 @@ function normalizeParticipationId(value) {
 
 function normalizePlayerId(value) {
   return normalizeUuid(value);
+}
+
+function normalizeApiVersion(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return String(parsed);
 }
 
 function uniqueIds(items) {
@@ -109,7 +133,10 @@ async function updateBadge() {
 }
 
 async function ensureInitialized() {
-  const result = await storageGet(Object.values(STORAGE_KEYS));
+  const result = await storageGet([
+    ...Object.values(STORAGE_KEYS),
+    ...Object.values(LEGACY_STORAGE_KEYS)
+  ]);
   const updates = {};
 
   if (!Array.isArray(result[STORAGE_KEYS.pending])) {
@@ -134,6 +161,29 @@ async function ensureInitialized() {
 
   if (!(STORAGE_KEYS.playerId in result)) {
     updates[STORAGE_KEYS.playerId] = null;
+  }
+
+  if (!(STORAGE_KEYS.historySyncLast in result)) {
+    updates[STORAGE_KEYS.historySyncLast] = null;
+  }
+
+  if (result[STORAGE_KEYS.sapApiVersion] !== DEFAULT_SAP_API_VERSION) {
+    updates[STORAGE_KEYS.sapApiVersion] = DEFAULT_SAP_API_VERSION;
+  }
+
+  const legacyEmail = typeof result[LEGACY_STORAGE_KEYS.autoHistorySyncEmail] === "string"
+    ? result[LEGACY_STORAGE_KEYS.autoHistorySyncEmail].trim()
+    : "";
+  const legacyPassword = typeof result[LEGACY_STORAGE_KEYS.autoHistorySyncPassword] === "string"
+    ? result[LEGACY_STORAGE_KEYS.autoHistorySyncPassword]
+    : "";
+
+  if (typeof result[STORAGE_KEYS.savedSapEmail] !== "string") {
+    updates[STORAGE_KEYS.savedSapEmail] = legacyEmail || "";
+  }
+
+  if (typeof result[STORAGE_KEYS.savedSapPassword] !== "string") {
+    updates[STORAGE_KEYS.savedSapPassword] = legacyPassword || "";
   }
 
   if (Object.keys(updates).length > 0) {
@@ -224,6 +274,367 @@ async function enqueueParticipationIds(rawIds, source, rawPlayerId) {
     added,
     skipped,
     source: source || "unknown",
+    state: await buildState()
+  };
+}
+
+function isFinishedOutcome(outcome) {
+  return outcome === 1 || outcome === 2;
+}
+
+function isFinishedHistoryItem(item) {
+  const battleOutcome = item?.Battle?.Outcome;
+  if (isFinishedOutcome(battleOutcome)) {
+    return true;
+  }
+
+  const victories = Number(item?.Victories);
+  if (Number.isFinite(victories) && victories >= 10) {
+    return true;
+  }
+
+  const lives = Number(item?.Lives);
+  if (Number.isFinite(lives) && lives <= 0) {
+    return true;
+  }
+
+  return false;
+}
+
+function extractHistoryPlayerId(historyItems) {
+  for (const item of historyItems) {
+    const candidates = [item?.Battle?.User?.Id, item?.User?.Id, item?.UserId];
+    for (const candidate of candidates) {
+      const id = normalizePlayerId(candidate);
+      if (id) {
+        return id;
+      }
+    }
+  }
+  return null;
+}
+
+function collectHistoryParticipationIds(historyItems, onlyFinished) {
+  const ids = [];
+  const seen = new Set();
+
+  for (const item of historyItems) {
+    if (onlyFinished && !isFinishedHistoryItem(item)) {
+      continue;
+    }
+
+    const participationId = normalizeParticipationId(item?.ParticipationId);
+    if (!participationId || seen.has(participationId)) {
+      continue;
+    }
+
+    seen.add(participationId);
+    ids.push(participationId);
+  }
+
+  return ids;
+}
+
+function parseJsonText(text) {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function getErrorMessageFromPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  if (typeof payload.error === "string" && payload.error.trim()) {
+    return payload.error.trim();
+  }
+
+  if (typeof payload.Error === "string" && payload.Error.trim()) {
+    return payload.Error.trim();
+  }
+
+  if (typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message.trim();
+  }
+
+  if (typeof payload.Message === "string" && payload.Message.trim()) {
+    return payload.Message.trim();
+  }
+
+  return null;
+}
+
+function normalizeBearerToken(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) {
+    return "";
+  }
+
+  return raw.replace(/^Bearer\s+/i, "").trim();
+}
+
+async function loginWithSapCredentials(email, password, apiVersion) {
+  const endpoint = `https://api.teamwood.games/0.${apiVersion}/api/user/login`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    body: JSON.stringify({
+      Email: email,
+      Password: password,
+      Version: Number(apiVersion)
+    })
+  });
+
+  const text = await response.text();
+  const payload = parseJsonText(text);
+
+  if (!response.ok) {
+    const detail = getErrorMessageFromPayload(payload);
+    throw new Error(detail ? `SAP login failed: HTTP ${response.status}: ${detail}` : `SAP login failed: HTTP ${response.status}`);
+  }
+
+  const token = normalizeBearerToken(payload?.Token || payload?.token || "");
+  if (!token) {
+    throw new Error("SAP login failed: missing token in response");
+  }
+
+  return {
+    token,
+    endpoint
+  };
+}
+
+async function fetchHistoryWithToken(authToken, apiVersion) {
+  const token = normalizeBearerToken(authToken);
+  if (!token) {
+    throw new Error("History sync failed: missing auth token");
+  }
+
+  const endpointCandidates = [
+    {
+      method: "POST",
+      path: "/api/history/fetch",
+      body: { Version: Number(apiVersion) }
+    },
+    {
+      method: "POST",
+      path: "/api/history/fetch",
+      body: {}
+    },
+    {
+      method: "GET",
+      path: "/api/history/fetch"
+    },
+    {
+      method: "POST",
+      path: "/api/history/get",
+      body: { Version: Number(apiVersion) }
+    },
+    {
+      method: "GET",
+      path: "/api/history/get"
+    }
+  ];
+
+  let lastError = null;
+
+  for (const candidate of endpointCandidates) {
+    const endpoint = `https://api.teamwood.games/0.${apiVersion}${candidate.path}`;
+
+    const requestOptions = {
+      method: candidate.method,
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    };
+
+    if (candidate.method === "POST") {
+      requestOptions.headers["Content-Type"] = "application/json";
+      requestOptions.body = JSON.stringify(candidate.body ?? {});
+    }
+
+    try {
+      const response = await fetch(endpoint, requestOptions);
+      const text = await response.text();
+      const payload = parseJsonText(text);
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`History sync failed: SAP auth rejected (HTTP ${response.status})`);
+      }
+
+      if (!response.ok) {
+        const detail = getErrorMessageFromPayload(payload);
+        lastError = `${candidate.method} ${candidate.path} -> ${detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`}`;
+        continue;
+      }
+
+      const historyItems = Array.isArray(payload?.History) ? payload.History : null;
+      if (!historyItems) {
+        lastError = `${candidate.method} ${candidate.path} -> invalid history payload`;
+        continue;
+      }
+
+      return {
+        endpoint,
+        method: candidate.method,
+        requestBody: Object.prototype.hasOwnProperty.call(candidate, "body") ? candidate.body : null,
+        historyItems
+      };
+    } catch (error) {
+      if (String(error && error.message || "").startsWith("History sync failed: SAP auth rejected")) {
+        throw error;
+      }
+      lastError = `${candidate.method} ${candidate.path} -> ${error && error.message ? error.message : "network_error"}`;
+    }
+  }
+
+  throw new Error(`History sync failed: ${lastError || "unknown_error"}`);
+}
+
+function buildHistoryFailureSummary(trigger, apiVersion, error, extra = {}) {
+  return {
+    ok: false,
+    trigger,
+    at: new Date().toISOString(),
+    apiVersion,
+    fetched: 0,
+    finished: 0,
+    added: 0,
+    skipped: 0,
+    error,
+    ...extra
+  };
+}
+
+async function persistHistorySyncSummary(summary, apiVersion) {
+  const updates = {
+    [STORAGE_KEYS.historySyncLast]: summary
+  };
+
+  const normalizedVersion = normalizeApiVersion(apiVersion);
+  if (normalizedVersion) {
+    updates[STORAGE_KEYS.sapApiVersion] = normalizedVersion;
+  }
+
+  await storageSet(updates);
+}
+
+async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
+  await ensureInitialized();
+
+  const providedEmail = typeof rawEmail === "string" ? rawEmail.trim() : "";
+  const providedPassword = typeof rawPassword === "string" ? rawPassword.trim() : "";
+  const saved = await storageGet([
+    STORAGE_KEYS.savedSapEmail,
+    STORAGE_KEYS.savedSapPassword
+  ]);
+  const savedEmail = typeof saved[STORAGE_KEYS.savedSapEmail] === "string"
+    ? saved[STORAGE_KEYS.savedSapEmail].trim()
+    : "";
+  const savedPassword = typeof saved[STORAGE_KEYS.savedSapPassword] === "string"
+    ? saved[STORAGE_KEYS.savedSapPassword]
+    : "";
+
+  const email = providedEmail || savedEmail;
+  const canReuseSavedPassword = !providedEmail || providedEmail === savedEmail;
+  const password = providedPassword || (canReuseSavedPassword ? savedPassword : "");
+  const apiVersion = DEFAULT_SAP_API_VERSION;
+
+  if (!email || !password) {
+    const summary = buildHistoryFailureSummary(
+      trigger,
+      apiVersion,
+      "SAP email/password missing. Enter them once, then they will be remembered on this device."
+    );
+    await persistHistorySyncSummary(summary, apiVersion);
+    return {
+      ...summary,
+      state: await buildState()
+    };
+  }
+
+  let loginResult;
+  try {
+    loginResult = await loginWithSapCredentials(email, password, apiVersion);
+  } catch (error) {
+    const summary = buildHistoryFailureSummary(
+      trigger,
+      apiVersion,
+      error && error.message ? error.message : "SAP login failed",
+      {
+        loginEndpoint: `https://api.teamwood.games/0.${apiVersion}/api/user/login`
+      }
+    );
+    await persistHistorySyncSummary(summary, apiVersion);
+    return {
+      ...summary,
+      state: await buildState()
+    };
+  }
+
+  let historyResult;
+  try {
+    historyResult = await fetchHistoryWithToken(loginResult.token, apiVersion);
+  } catch (error) {
+    const summary = buildHistoryFailureSummary(
+      trigger,
+      apiVersion,
+      error && error.message ? error.message : "History sync failed",
+      {
+        loginEndpoint: loginResult.endpoint
+      }
+    );
+    await persistHistorySyncSummary(summary, apiVersion);
+    return {
+      ...summary,
+      state: await buildState()
+    };
+  }
+
+  const historyItems = Array.isArray(historyResult.historyItems) ? historyResult.historyItems : [];
+  const fetchedIds = collectHistoryParticipationIds(historyItems, false);
+  const finishedIds = collectHistoryParticipationIds(historyItems, true);
+  const playerId = extractHistoryPlayerId(historyItems);
+
+  console.log("SAP Library Uploader: History sync fetched participation IDs:", fetchedIds);
+  console.log("SAP Library Uploader: History sync finished participation IDs:", finishedIds);
+
+  const enqueueResult = await enqueueParticipationIds(finishedIds, "history_sync_credentials", playerId);
+
+  const summary = {
+    ok: true,
+    trigger,
+    at: new Date().toISOString(),
+    apiVersion,
+    loginEndpoint: loginResult.endpoint,
+    endpoint: historyResult.endpoint,
+    method: historyResult.method,
+    requestBody: historyResult.requestBody,
+    fetched: fetchedIds.length,
+    finished: finishedIds.length,
+    added: enqueueResult.added,
+    skipped: enqueueResult.skipped,
+    fetchedParticipationIds: fetchedIds,
+    finishedParticipationIds: finishedIds
+  };
+
+  await persistHistorySyncSummary(summary, apiVersion);
+  await storageSet({
+    [STORAGE_KEYS.savedSapEmail]: email,
+    [STORAGE_KEYS.savedSapPassword]: password
+  });
+
+  return {
+    ...summary,
     state: await buildState()
   };
 }
@@ -408,6 +819,16 @@ async function buildState() {
   const retryRequired = Boolean(result[STORAGE_KEYS.retryRequired]);
   const lastUpload = result[STORAGE_KEYS.lastUpload] || null;
   const playerId = normalizePlayerId(result[STORAGE_KEYS.playerId]);
+  const historySyncLast = result[STORAGE_KEYS.historySyncLast] && typeof result[STORAGE_KEYS.historySyncLast] === "object"
+    ? result[STORAGE_KEYS.historySyncLast]
+    : null;
+  const sapApiVersion = normalizeApiVersion(result[STORAGE_KEYS.sapApiVersion]) || DEFAULT_SAP_API_VERSION;
+  const savedSapEmail = typeof result[STORAGE_KEYS.savedSapEmail] === "string"
+    ? result[STORAGE_KEYS.savedSapEmail].trim()
+    : "";
+  const savedSapPassword = typeof result[STORAGE_KEYS.savedSapPassword] === "string"
+    ? result[STORAGE_KEYS.savedSapPassword]
+    : "";
 
   let syncState = "ready";
   if (uploadPromise) {
@@ -429,6 +850,11 @@ async function buildState() {
       uploaded: uploaded.length,
       failed: failedCount
     },
+    sapApiVersion,
+    savedSapEmail: savedSapEmail || null,
+    savedSapPassword: savedSapPassword || null,
+    hasSavedSapPassword: Boolean(savedSapPassword),
+    historySyncLast,
     retryRequired,
     lastUpload,
     isUploading: Boolean(uploadPromise)
@@ -451,6 +877,21 @@ async function handleMessage(message) {
 
   if (type === "enqueue_participation_ids") {
     return enqueueParticipationIds(message.ids, message.source || "unknown", message.playerId || null);
+  }
+
+  if (type === "sync_history_with_credentials") {
+    const summary = await syncHistoryWithCredentials(
+      message.email,
+      message.password,
+      "manual_history_sync"
+    );
+
+    return {
+      ok: summary.ok,
+      summary,
+      state: summary.state || await buildState(),
+      error: summary.ok ? null : summary.error
+    };
   }
 
   if (type === "get_state") {
@@ -486,12 +927,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+async function initializeRuntime() {
+  await ensureInitialized();
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  void ensureInitialized();
+  void initializeRuntime();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void ensureInitialized();
+  void initializeRuntime();
 });
 
-void ensureInitialized();
+void initializeRuntime();

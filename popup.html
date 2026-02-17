@@ -137,6 +137,43 @@
         color: #475569;
         font-size: 12px;
       }
+
+      .input-field {
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px;
+        font: inherit;
+        color: #0f172a;
+        background: #ffffff;
+      }
+
+      .input-field.small {
+        max-width: 120px;
+        margin-top: 0;
+      }
+
+      .input-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .inline-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        color: #334155;
+        font-size: 12px;
+      }
+
+      .inline-toggle input[type="checkbox"] {
+        margin: 0;
+      }
     </style>
   </head>
   <body>
@@ -165,6 +202,18 @@
         </div>
         <div id="lastSyncLine" class="line"><strong>Last Sync:</strong> none yet</div>
         <div id="statusMessage" class="line">Open SAP and play or view history.</div>
+
+        <div class="line"><strong>SAP Login (History Sync)</strong></div>
+        <input id="sapEmail" class="input-field" type="email" autocomplete="username" placeholder="SAP email" />
+        <input id="sapPassword" class="input-field" type="password" autocomplete="current-password" placeholder="SAP password" />
+        <label class="inline-toggle" for="showPasswordToggle">
+          <input id="showPasswordToggle" type="checkbox" />
+          Show password
+        </label>
+        <div class="note">API version: <code>0.45</code>.</div>
+        <div class="input-row">
+          <button id="syncHistory" type="button" class="secondary">Sync History</button>
+        </div>
 
         <div class="actions">
           <div class="actions-row">
