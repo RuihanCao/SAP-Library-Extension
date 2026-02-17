@@ -41,3 +41,7 @@ For local testing, temporarily change `TARGET_BASE_URL` in `service_worker.js` t
 
 - The extension keeps an uploaded-ID cache to avoid re-sending old IDs.
 - After a failed upload, automatic retries pause until you press `Retry Upload`.
+
+## Privacy Policy
+
+See `PRIVACY_POLICY.md`.
