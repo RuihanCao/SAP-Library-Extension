@@ -593,7 +593,7 @@
         "Calculator",
         unknownWarnings,
         missingAbilityWarnings,
-        { reverseInputOrder: false }
+        { reverseInputOrder: true }
       ),
       Opponent: {
         Id: randomUuid(),
