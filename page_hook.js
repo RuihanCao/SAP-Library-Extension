@@ -101,6 +101,13 @@
       return null;
     }
 
+    // One-shot behavior: consume the override on first matching battle/get call.
+    battleOverride.enabled = false;
+    post({
+      type: "battle_override_used",
+      battleId
+    });
+
     payload.Id = battleId;
 
     try {

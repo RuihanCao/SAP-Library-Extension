@@ -6,7 +6,7 @@ const STORAGE_KEYS = {
   retryRequired: "slx_retry_required",
   playerId: "slx_player_id",
   battleOverrideEnabled: "slx_battle_override_enabled",
-  battleOverrideBattle: "slx_battle_override_battle"
+  battleOverrideBattle: "slx_battle_override_battle",
   historySyncLast: "slx_history_sync_last",
   sapApiVersion: "slx_sap_api_version",
   savedSapEmail: "slx_saved_sap_email",
@@ -207,6 +207,8 @@ function sanitizeBattlePayload(value) {
   } catch {
     return null;
   }
+}
+
 function normalizeApiVersion(value) {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -321,6 +323,8 @@ async function ensureInitialized() {
 
   if (!(STORAGE_KEYS.battleOverrideBattle in result)) {
     updates[STORAGE_KEYS.battleOverrideBattle] = null;
+  }
+
   if (!(STORAGE_KEYS.historySyncLast in result)) {
     updates[STORAGE_KEYS.historySyncLast] = null;
   }
