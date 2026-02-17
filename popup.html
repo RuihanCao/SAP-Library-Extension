@@ -138,6 +138,7 @@
         font-size: 12px;
       }
 
+      .toggle-row {
       .input-field {
         box-sizing: border-box;
         width: 100%;
@@ -162,6 +163,22 @@
         margin-top: 8px;
       }
 
+      .toggle-row label {
+        font-weight: 700;
+      }
+
+      .json-input {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px;
+        min-height: 140px;
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: #0f172a;
+        background: #ffffff;
+        resize: vertical;
       .inline-toggle {
         display: inline-flex;
         align-items: center;
@@ -221,6 +238,33 @@
           </div>
           <div class="actions-row">
             <button id="openProfile" type="button" class="secondary" disabled>Open My Profile</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h1>Replay Injection</h1>
+        <p class="sub">Set a custom battle JSON for <code>/api/battle/get/&lt;id&gt;</code>.</p>
+
+        <div class="toggle-row">
+          <input id="overrideEnabled" type="checkbox" />
+          <label for="overrideEnabled">Enable Injection</label>
+        </div>
+
+        <textarea id="overrideJson" class="json-input" spellcheck="false" placeholder='{"Id":"...","Seed":123,...}'></textarea>
+        <div id="overrideStatus" class="line">No override loaded.</div>
+
+        <div class="actions">
+          <div class="actions-row">
+            <button id="saveOverride" type="button">Save Override</button>
+            <button id="loadOverride" type="button" class="secondary">Load Current</button>
+          </div>
+          <div class="actions-row">
+            <button id="pasteOverride" type="button" class="secondary">Paste JSON</button>
+            <button id="disableOverride" type="button" class="secondary">Disable</button>
+          </div>
+          <div class="actions-row">
+            <button id="forceBattleFetch" type="button" class="secondary">Force Battle Request</button>
           </div>
         </div>
       </section>

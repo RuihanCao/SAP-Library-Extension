@@ -11,7 +11,15 @@
     showPasswordToggle: document.getElementById("showPasswordToggle"),
     syncHistory: document.getElementById("syncHistory"),
     retryNow: document.getElementById("retryNow"),
-    openProfile: document.getElementById("openProfile")
+    openProfile: document.getElementById("openProfile"),
+    overrideEnabled: document.getElementById("overrideEnabled"),
+    overrideJson: document.getElementById("overrideJson"),
+    overrideStatus: document.getElementById("overrideStatus"),
+    saveOverride: document.getElementById("saveOverride"),
+    loadOverride: document.getElementById("loadOverride"),
+    pasteOverride: document.getElementById("pasteOverride"),
+    disableOverride: document.getElementById("disableOverride"),
+    forceBattleFetch: document.getElementById("forceBattleFetch")
   };
 
   let refreshTimer = null;
@@ -62,6 +70,16 @@
   function setBusy(value) {
     busy = Boolean(value);
     els.retryNow.disabled = busy;
+    els.forceBattleFetch.disabled = busy;
+  }
+
+  function prettyJson(value) {
+    return JSON.stringify(value, null, 2);
+  }
+
+  function setOverrideStatus(text, isError = false) {
+    els.overrideStatus.textContent = text;
+    els.overrideStatus.style.color = isError ? "#991b1b" : "#334155";
     els.syncHistory.disabled = busy;
     els.sapEmail.disabled = busy;
     els.sapPassword.disabled = busy;
@@ -221,6 +239,126 @@
     }
   }
 
+  async function refreshOverrideConfig() {
+    const response = await sendMessage({ type: "get_battle_override_config" });
+    if (!response || !response.ok) {
+      setOverrideStatus(response?.error || "Could not load replay override", true);
+      return;
+    }
+
+    const config = response.config || { enabled: false, battle: null };
+    els.overrideEnabled.checked = Boolean(config.enabled);
+    els.overrideJson.value = config.battle ? prettyJson(config.battle) : "";
+
+    if (config.enabled) {
+      setOverrideStatus("Replay injection enabled.");
+    } else if (config.battle) {
+      setOverrideStatus("Replay JSON loaded. Enable injection to use it.");
+    } else {
+      setOverrideStatus("No replay override saved.");
+    }
+  }
+
+  async function saveOverrideConfig() {
+    const enabled = Boolean(els.overrideEnabled.checked);
+    const battleText = els.overrideJson.value || "";
+
+    const response = await sendMessage({
+      type: "set_battle_override_config",
+      enabled,
+      battleText
+    });
+
+    if (!response || !response.ok) {
+      setOverrideStatus(response?.error || "Could not save replay override", true);
+      return;
+    }
+
+    const config = response.config || { enabled: false, battle: null };
+    els.overrideEnabled.checked = Boolean(config.enabled);
+    els.overrideJson.value = config.battle ? prettyJson(config.battle) : "";
+    setOverrideStatus(config.enabled ? "Saved. Injection is now active." : "Saved. Injection is disabled.");
+  }
+
+  async function disableOverrideConfig() {
+    const response = await sendMessage({
+      type: "set_battle_override_config",
+      enabled: false,
+      battleText: ""
+    });
+
+    if (!response || !response.ok) {
+      setOverrideStatus(response?.error || "Could not disable replay override", true);
+      return;
+    }
+
+    els.overrideEnabled.checked = false;
+    setOverrideStatus("Injection disabled. Saved replay cleared.");
+  }
+
+  async function pasteOverrideFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        setOverrideStatus("Clipboard is empty.", true);
+        return;
+      }
+
+      els.overrideJson.value = text;
+      setOverrideStatus("Pasted from clipboard. Click Save Override.");
+    } catch (error) {
+      setOverrideStatus(error?.message || "Clipboard access failed.", true);
+    }
+  }
+
+  function randomUuid() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+      const random = Math.floor(Math.random() * 16);
+      const value = token === "x" ? random : ((random & 0x3) | 0x8);
+      return value.toString(16);
+    });
+  }
+
+  async function forceBattleFetchNow() {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const activeTab = tabs && tabs[0];
+
+      if (!activeTab || typeof activeTab.id !== "number") {
+        throw new Error("No active tab found.");
+      }
+
+      const battleId = randomUuid();
+      const response = await chrome.tabs.sendMessage(activeTab.id, {
+        type: "force_battle_fetch",
+        battleId,
+        timeoutMs: 10000
+      });
+
+      if (!response || !response.ok) {
+        throw new Error(
+          response?.error ||
+          "Could not force battle request in this tab. Open SAP game tab first."
+        );
+      }
+
+      const statusText = Number.isFinite(response.status)
+        ? `status ${response.status}`
+        : "no status";
+      const responseIdText = response.responseId ? `, response Id ${response.responseId}` : "";
+
+      setOverrideStatus(
+        `Forced battle request (${statusText}) for ${response.battleId || battleId}${responseIdText}.`
+      );
+    } catch (error) {
+      setOverrideStatus(error?.message || "Force battle request failed.", true);
+    }
+  }
+
   async function retryUploadNow() {
     if (busy) {
       return;
@@ -310,13 +448,35 @@
     els.retryNow.addEventListener("click", () => {
       void retryUploadNow();
     });
+
     els.openProfile.addEventListener("click", () => {
       void openMyProfile();
+    });
+
+    els.saveOverride.addEventListener("click", () => {
+      void saveOverrideConfig();
+    });
+
+    els.loadOverride.addEventListener("click", () => {
+      void refreshOverrideConfig();
+    });
+
+    els.pasteOverride.addEventListener("click", () => {
+      void pasteOverrideFromClipboard();
+    });
+
+    els.disableOverride.addEventListener("click", () => {
+      void disableOverrideConfig();
+    });
+
+    els.forceBattleFetch.addEventListener("click", () => {
+      void forceBattleFetchNow();
     });
   }
 
   async function init() {
     bindEvents();
+    await Promise.all([refreshState(), refreshOverrideConfig()]);
     applyPasswordVisibility();
     await refreshState();
 

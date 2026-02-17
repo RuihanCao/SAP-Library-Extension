@@ -4,7 +4,8 @@
   "version": "0.2.1",
   "manifest_version": 3,
   "permissions": [
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "https://sap-library.vercel.app/*",
@@ -39,12 +40,24 @@
       ],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "*://www.sap-calculator.com/*",
+        "*://sap-calculator.com/*"
+      ],
+      "js": [
+        "calculator_maps.js",
+        "calculator_content_script.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "page_hook.js"
+        "page_hook.js",
+        "battle_override.json"
       ],
       "matches": [
         "*://html-classic.itch.zone/*",

@@ -5,6 +5,8 @@ const STORAGE_KEYS = {
   lastUpload: "slx_last_upload",
   retryRequired: "slx_retry_required",
   playerId: "slx_player_id",
+  battleOverrideEnabled: "slx_battle_override_enabled",
+  battleOverrideBattle: "slx_battle_override_battle"
   historySyncLast: "slx_history_sync_last",
   sapApiVersion: "slx_sap_api_version",
   savedSapEmail: "slx_saved_sap_email",
@@ -22,6 +24,9 @@ const MAX_UPLOADED_IDS = 5000;
 const DEFAULT_SAP_API_VERSION = "45";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_BATTLE_ID = "00000000-0000-4000-8000-000000000000";
+const DEFAULT_USER_ID = "11111111-1111-4111-8111-111111111111";
+const DEFAULT_OPPONENT_ID = "22222222-2222-4222-8222-222222222222";
 
 let uploadPromise = null;
 
@@ -55,6 +60,153 @@ function normalizePlayerId(value) {
   return normalizeUuid(value);
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeBoardPayload(rawBoard) {
+  const board = isPlainObject(rawBoard) ? rawBoard : {};
+
+  if (!isPlainObject(board.Mins)) {
+    board.Mins = {};
+  }
+  if (!isPlainObject(board.Mins.Size)) {
+    board.Mins.Size = { x: 5, y: 1 };
+  }
+  if (!Number.isFinite(board.Mins.Size.x)) {
+    board.Mins.Size.x = 5;
+  }
+  if (!Number.isFinite(board.Mins.Size.y)) {
+    board.Mins.Size.y = 1;
+  }
+  if (!Array.isArray(board.Mins.Items)) {
+    board.Mins.Items = [];
+  }
+  while (board.Mins.Items.length < 5) {
+    board.Mins.Items.push(null);
+  }
+
+  if (!Array.isArray(board.MiSh)) {
+    board.MiSh = [];
+  }
+  if (!Array.isArray(board.SpSh)) {
+    board.SpSh = [];
+  }
+  if (!Array.isArray(board.MSBo)) {
+    board.MSBo = [];
+  }
+  if (!Array.isArray(board.SpPl)) {
+    board.SpPl = [];
+  }
+  if (!Array.isArray(board.PrEn)) {
+    board.PrEn = [];
+  }
+  if (!Array.isArray(board.PrES)) {
+    board.PrES = [];
+  }
+  if (!Array.isArray(board.PrES2)) {
+    board.PrES2 = [];
+  }
+
+  if (!("GoGa" in board)) {
+    board.GoGa = 0;
+  }
+  if (!("Wacky" in board)) {
+    board.Wacky = null;
+  }
+  if (!("WMPs" in board)) {
+    board.WMPs = null;
+  }
+  if (!("WMPb" in board)) {
+    board.WMPb = false;
+  }
+
+  if (!isPlainObject(board.Rel)) {
+    board.Rel = {
+      Size: { x: 2, y: 1 },
+      Items: [null, null]
+    };
+  } else {
+    if (!isPlainObject(board.Rel.Size)) {
+      board.Rel.Size = { x: 2, y: 1 };
+    }
+    if (!Number.isFinite(board.Rel.Size.x)) {
+      board.Rel.Size.x = 2;
+    }
+    if (!Number.isFinite(board.Rel.Size.y)) {
+      board.Rel.Size.y = 1;
+    }
+    if (!Array.isArray(board.Rel.Items)) {
+      board.Rel.Items = [null, null];
+    }
+  }
+
+  if (!isPlainObject(board.Bul)) {
+    board.Bul = {
+      Size: { x: 0, y: 0 },
+      Items: null
+    };
+  } else if (!isPlainObject(board.Bul.Size)) {
+    board.Bul.Size = { x: 0, y: 0 };
+  }
+
+  return board;
+}
+
+function sanitizeBattlePayload(value) {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  const maybeBattle = isPlainObject(value.battle) ? value.battle : value;
+
+  try {
+    const cloned = JSON.parse(JSON.stringify(maybeBattle));
+    if (!isPlainObject(cloned)) {
+      return null;
+    }
+
+    const battleId = normalizeUuid(cloned.Id);
+    cloned.Id = battleId || DEFAULT_BATTLE_ID;
+
+    if (!Number.isFinite(cloned.Seed)) {
+      cloned.Seed = 0;
+    }
+    if (!Number.isFinite(cloned.Outcome)) {
+      cloned.Outcome = 1;
+    }
+    if (typeof cloned.ResolvedOn !== "string" || !cloned.ResolvedOn.trim()) {
+      cloned.ResolvedOn = new Date().toISOString();
+    }
+    if (typeof cloned.WatchedOn !== "string" || !cloned.WatchedOn.trim()) {
+      cloned.WatchedOn = new Date().toISOString();
+    }
+    if (!Number.isFinite(cloned.EndResult)) {
+      cloned.EndResult = 0;
+    }
+
+    if (!isPlainObject(cloned.User)) {
+      cloned.User = {};
+    }
+    if (!isPlainObject(cloned.Opponent)) {
+      cloned.Opponent = {};
+    }
+    cloned.User.Id = normalizePlayerId(cloned.User.Id) || DEFAULT_USER_ID;
+    cloned.Opponent.Id = normalizePlayerId(cloned.Opponent.Id) || DEFAULT_OPPONENT_ID;
+    if (typeof cloned.User.DisplayName !== "string" || !cloned.User.DisplayName.trim()) {
+      cloned.User.DisplayName = "Player 1";
+    }
+    if (typeof cloned.Opponent.DisplayName !== "string" || !cloned.Opponent.DisplayName.trim()) {
+      cloned.Opponent.DisplayName = "Player 2";
+    }
+
+    cloned.UserBoard = normalizeBoardPayload(cloned.UserBoard);
+    cloned.OpponentBoard = normalizeBoardPayload(cloned.OpponentBoard);
+
+    return cloned;
+  } catch {
+    return null;
+  }
 function normalizeApiVersion(value) {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -163,6 +315,12 @@ async function ensureInitialized() {
     updates[STORAGE_KEYS.playerId] = null;
   }
 
+  if (!(STORAGE_KEYS.battleOverrideEnabled in result)) {
+    updates[STORAGE_KEYS.battleOverrideEnabled] = false;
+  }
+
+  if (!(STORAGE_KEYS.battleOverrideBattle in result)) {
+    updates[STORAGE_KEYS.battleOverrideBattle] = null;
   if (!(STORAGE_KEYS.historySyncLast in result)) {
     updates[STORAGE_KEYS.historySyncLast] = null;
   }
@@ -191,6 +349,94 @@ async function ensureInitialized() {
   }
 
   await updateBadge();
+}
+
+function parseBattleOverrideText(rawBattleText) {
+  if (typeof rawBattleText !== "string") {
+    return { ok: false, error: "Battle JSON text is required" };
+  }
+
+  const text = rawBattleText.trim();
+  if (!text) {
+    return { ok: true, battle: null };
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    const battle = sanitizeBattlePayload(parsed);
+    if (!battle) {
+      return { ok: false, error: "Battle JSON must be an object" };
+    }
+    return { ok: true, battle };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error && error.message ? `Invalid battle JSON: ${error.message}` : "Invalid battle JSON"
+    };
+  }
+}
+
+async function getBattleOverrideConfig() {
+  await ensureInitialized();
+  const result = await storageGet([
+    STORAGE_KEYS.battleOverrideEnabled,
+    STORAGE_KEYS.battleOverrideBattle
+  ]);
+
+  return {
+    enabled: Boolean(result[STORAGE_KEYS.battleOverrideEnabled]),
+    battle: sanitizeBattlePayload(result[STORAGE_KEYS.battleOverrideBattle])
+  };
+}
+
+async function broadcastBattleOverrideUpdated(config) {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs || []) {
+      if (!tab || typeof tab.id !== "number") {
+        continue;
+      }
+
+      chrome.tabs.sendMessage(tab.id, {
+        type: "battle_override_updated",
+        config
+      }, () => {
+        // Ignore missing content script errors.
+        void chrome.runtime.lastError;
+      });
+    }
+  } catch {
+    // Ignore tab query/send errors.
+  }
+}
+
+async function setBattleOverrideConfig(rawEnabled, rawBattle, rawBattleText) {
+  const enabled = Boolean(rawEnabled);
+
+  let battle = null;
+  if (typeof rawBattleText === "string") {
+    const parsed = parseBattleOverrideText(rawBattleText);
+    if (!parsed.ok) {
+      return { ok: false, error: parsed.error || "Invalid battle JSON" };
+    }
+    battle = parsed.battle;
+  } else {
+    battle = sanitizeBattlePayload(rawBattle);
+  }
+
+  if (enabled && !battle) {
+    return { ok: false, error: "Cannot enable replay injection without a battle payload" };
+  }
+
+  await storageSet({
+    [STORAGE_KEYS.battleOverrideEnabled]: enabled,
+    [STORAGE_KEYS.battleOverrideBattle]: battle
+  });
+
+  const config = await getBattleOverrideConfig();
+  await broadcastBattleOverrideUpdated(config);
+
+  return { ok: true, config };
 }
 
 async function markBatchFailure(ids, errorMessage) {
@@ -819,6 +1065,8 @@ async function buildState() {
   const retryRequired = Boolean(result[STORAGE_KEYS.retryRequired]);
   const lastUpload = result[STORAGE_KEYS.lastUpload] || null;
   const playerId = normalizePlayerId(result[STORAGE_KEYS.playerId]);
+  const battleOverrideEnabled = Boolean(result[STORAGE_KEYS.battleOverrideEnabled]);
+  const battleOverrideBattle = sanitizeBattlePayload(result[STORAGE_KEYS.battleOverrideBattle]);
   const historySyncLast = result[STORAGE_KEYS.historySyncLast] && typeof result[STORAGE_KEYS.historySyncLast] === "object"
     ? result[STORAGE_KEYS.historySyncLast]
     : null;
@@ -845,6 +1093,10 @@ async function buildState() {
     syncState,
     target: TARGET_BASE_URL,
     playerId,
+    battleOverride: {
+      enabled: battleOverrideEnabled,
+      hasBattle: Boolean(battleOverrideBattle)
+    },
     counts: {
       pending: pending.length,
       uploaded: uploaded.length,
@@ -909,6 +1161,18 @@ async function handleMessage(message) {
 
   if (type === "ping") {
     return { ok: true, pong: true };
+  }
+
+  if (type === "get_battle_override_config") {
+    return { ok: true, config: await getBattleOverrideConfig() };
+  }
+
+  if (type === "set_battle_override_config") {
+    return setBattleOverrideConfig(
+      message.enabled,
+      message.battle || null,
+      typeof message.battleText === "string" ? message.battleText : undefined
+    );
   }
 
   return { ok: false, error: `Unknown message type: ${String(type)}` };
