@@ -393,27 +393,6 @@ async function getBattleOverrideConfig() {
   };
 }
 
-async function broadcastBattleOverrideUpdated(config) {
-  try {
-    const tabs = await chrome.tabs.query({});
-    for (const tab of tabs || []) {
-      if (!tab || typeof tab.id !== "number") {
-        continue;
-      }
-
-      chrome.tabs.sendMessage(tab.id, {
-        type: "battle_override_updated",
-        config
-      }, () => {
-        // Ignore missing content script errors.
-        void chrome.runtime.lastError;
-      });
-    }
-  } catch {
-    // Ignore tab query/send errors.
-  }
-}
-
 async function setBattleOverrideConfig(rawEnabled, rawBattle, rawBattleText) {
   const enabled = Boolean(rawEnabled);
 
@@ -438,7 +417,6 @@ async function setBattleOverrideConfig(rawEnabled, rawBattle, rawBattleText) {
   });
 
   const config = await getBattleOverrideConfig();
-  await broadcastBattleOverrideUpdated(config);
 
   return { ok: true, config };
 }

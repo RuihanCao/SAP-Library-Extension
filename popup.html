@@ -254,25 +254,12 @@
         <h1>Replay Injection</h1>
         <p class="sub">Set a custom battle JSON for <code>/api/battle/get/&lt;id&gt;</code>.</p>
 
-        <div class="toggle-row">
-          <input id="overrideEnabled" type="checkbox" />
-          <label for="overrideEnabled">Enable Injection</label>
-        </div>
-
         <textarea id="overrideJson" class="json-input" spellcheck="false" placeholder='{"Id":"...","Seed":123,...}'></textarea>
         <div id="overrideStatus" class="line">No override loaded.</div>
 
         <div class="actions">
           <div class="actions-row">
-            <button id="saveOverride" type="button">Save Override</button>
-            <button id="loadOverride" type="button" class="secondary">Load Current</button>
-          </div>
-          <div class="actions-row">
-            <button id="pasteOverride" type="button" class="secondary">Paste JSON</button>
-            <button id="disableOverride" type="button" class="secondary">Disable</button>
-          </div>
-          <div class="actions-row">
-            <button id="forceBattleFetch" type="button" class="secondary">Force Battle Request</button>
+            <button id="saveOverride" type="button">Enable</button>
           </div>
         </div>
       </section>

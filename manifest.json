@@ -4,8 +4,7 @@
   "version": "0.2.1",
   "manifest_version": 3,
   "permissions": [
-    "storage",
-    "tabs"
+    "storage"
   ],
   "host_permissions": [
     "https://sap-library.vercel.app/*",

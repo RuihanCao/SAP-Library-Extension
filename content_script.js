@@ -107,30 +107,6 @@
     });
   }
 
-  async function consumeOverrideAfterUse() {
-    try {
-      const currentBattle = latestOverrideConfig && latestOverrideConfig.battle
-        ? latestOverrideConfig.battle
-        : null;
-
-      latestOverrideConfig = EMPTY_OVERRIDE_CONFIG;
-      pushOverrideConfig();
-
-      const response = await sendMessageToWorker({
-        type: "set_battle_override_config",
-        enabled: false,
-        battle: currentBattle
-      });
-
-      if (response?.ok) {
-        latestOverrideConfig = normalizeOverrideConfig(response.config);
-        pushOverrideConfig();
-      }
-    } catch {
-      // Ignore consume errors; local page override is already turned off.
-    }
-  }
-
   injectPageHook();
   void refreshOverrideConfig();
   startOverrideRefreshLoop();
@@ -213,11 +189,6 @@
         // Unsolicited result; useful for page-level debugging.
         console.info("[SAP Extension] Forced battle fetch result:", message);
       }
-      return;
-    }
-
-    if (message.type === "battle_override_used") {
-      void consumeOverrideAfterUse();
       return;
     }
 
