@@ -3,11 +3,179 @@
   const API_HOST = /https:\/\/api\.teamwood\.games\//i;
   const WATCH_PATH = /\/0\.\d+\/api\/(arena\/watch|versus\/watch)$/i;
   const HISTORY_PATH = /\/0\.\d+\/api\/history\/fetch$/i;
+  const BATTLE_GET_PATH = /\/0\.\d+\/api\/battle\/get\/([0-9a-f-]{36})$/i;
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const JSON_HEADERS = {
+    "Content-Type": "application/json; charset=utf-8"
+  };
+
+  const battleOverride = {
+    enabled: false,
+    battle: null
+  };
 
   function post(payload) {
     window.postMessage({ [MARKER]: true, ...payload }, "*");
   }
+
+  function normalizeUrl(value) {
+    try {
+      return new URL(String(value || ""), window.location.href).toString();
+    } catch {
+      return "";
+    }
+  }
+
+  function extractBattleId(url) {
+    try {
+      const urlObj = new URL(url);
+      const match = urlObj.pathname.match(BATTLE_GET_PATH);
+      if (!match) {
+        return null;
+      }
+
+      return normalizeUuid(match[1]);
+    } catch {
+      return null;
+    }
+  }
+
+  function cloneJson(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    try {
+      if (typeof structuredClone === "function") {
+        return structuredClone(value);
+      }
+    } catch {
+      // Ignore and fall back to JSON clone.
+    }
+
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  }
+
+  function buildBattleOverrideText(url) {
+    if (!battleOverride.enabled || !battleOverride.battle || typeof battleOverride.battle !== "object") {
+      return null;
+    }
+
+    const battleId = extractBattleId(url);
+    if (!battleId) {
+      return null;
+    }
+
+    const payload = cloneJson(battleOverride.battle);
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    payload.Id = battleId;
+
+    try {
+      return JSON.stringify(payload);
+    } catch {
+      return null;
+    }
+  }
+
+  function applyBattleOverrideConfig(message) {
+    battleOverride.enabled = Boolean(message.enabled);
+    battleOverride.battle = cloneJson(message.battle);
+  }
+
+  function dispatchXhrEvent(xhr, type) {
+    try {
+      xhr.dispatchEvent(new Event(type));
+    } catch {
+      // Ignore event dispatch failures.
+    }
+  }
+
+  function defineReadOnlyValue(target, key, value) {
+    try {
+      Object.defineProperty(target, key, {
+        configurable: true,
+        enumerable: true,
+        writable: false,
+        value
+      });
+    } catch {
+      // Some browser internals may reject overriding properties.
+    }
+  }
+
+  function encodeArrayBuffer(text) {
+    const encoder = new TextEncoder();
+    return encoder.encode(text).buffer;
+  }
+
+  function fakeXhrSuccess(xhr, url, bodyText) {
+    const headers = "content-type: application/json; charset=utf-8\r\n";
+    const responseType = xhr.responseType || "";
+
+    let parsedBody = null;
+    try {
+      parsedBody = JSON.parse(bodyText);
+    } catch {
+      parsedBody = null;
+    }
+
+    defineReadOnlyValue(xhr, "readyState", 4);
+    defineReadOnlyValue(xhr, "status", 200);
+    defineReadOnlyValue(xhr, "statusText", "OK");
+    defineReadOnlyValue(xhr, "responseURL", url);
+
+    if (responseType === "" || responseType === "text") {
+      defineReadOnlyValue(xhr, "responseText", bodyText);
+      defineReadOnlyValue(xhr, "response", bodyText);
+    } else if (responseType === "json") {
+      defineReadOnlyValue(xhr, "responseText", bodyText);
+      defineReadOnlyValue(xhr, "response", parsedBody);
+    } else if (responseType === "arraybuffer") {
+      defineReadOnlyValue(xhr, "response", encodeArrayBuffer(bodyText));
+    } else {
+      defineReadOnlyValue(xhr, "responseText", bodyText);
+      defineReadOnlyValue(xhr, "response", bodyText);
+    }
+
+    xhr.getAllResponseHeaders = () => headers;
+    xhr.getResponseHeader = (name) => {
+      if (typeof name !== "string") {
+        return null;
+      }
+
+      return name.toLowerCase() === "content-type" ? "application/json; charset=utf-8" : null;
+    };
+
+    setTimeout(() => {
+      dispatchXhrEvent(xhr, "readystatechange");
+      dispatchXhrEvent(xhr, "load");
+      dispatchXhrEvent(xhr, "loadend");
+    }, 0);
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) {
+      return;
+    }
+
+    const message = event.data;
+    if (!message || !message[MARKER]) {
+      return;
+    }
+
+    if (message.type === "set_battle_override") {
+      applyBattleOverrideConfig(message);
+    }
+  });
+
+  post({ type: "battle_override_request" });
 
   function normalizeUuid(value) {
     if (typeof value !== "string") {
@@ -187,7 +355,12 @@
   const originalFetch = window.fetch;
   window.fetch = function wrappedFetch(input) {
     const request = input instanceof Request ? input : null;
-    const url = request ? request.url : typeof input === "string" ? input : "";
+    const url = normalizeUrl(request ? request.url : typeof input === "string" ? input : "");
+    const battleText = buildBattleOverrideText(url);
+    if (battleText !== null) {
+      return Promise.resolve(new Response(battleText, { status: 200, headers: JSON_HEADERS }));
+    }
+
     const result = originalFetch.apply(this, arguments);
     result.then((response) => handleResponse(url, response)).catch(() => {});
     return result;
@@ -197,11 +370,18 @@
   const originalXhrSend = XMLHttpRequest.prototype.send;
 
   XMLHttpRequest.prototype.open = function wrappedOpen(method, url) {
-    this.__sapLibraryUploaderUrl = url;
+    this.__sapLibraryUploaderUrl = normalizeUrl(url);
     return originalXhrOpen.apply(this, arguments);
   };
 
   XMLHttpRequest.prototype.send = function wrappedSend() {
+    const url = this.__sapLibraryUploaderUrl || "";
+    const battleText = buildBattleOverrideText(url);
+    if (battleText !== null) {
+      fakeXhrSuccess(this, url, battleText);
+      return;
+    }
+
     this.addEventListener("loadend", () => {
       try {
         const url = this.__sapLibraryUploaderUrl || "";

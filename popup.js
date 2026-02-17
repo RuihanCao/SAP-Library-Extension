@@ -7,7 +7,14 @@
     lastSyncLine: document.getElementById("lastSyncLine"),
     statusMessage: document.getElementById("statusMessage"),
     retryNow: document.getElementById("retryNow"),
-    openProfile: document.getElementById("openProfile")
+    openProfile: document.getElementById("openProfile"),
+    overrideEnabled: document.getElementById("overrideEnabled"),
+    overrideJson: document.getElementById("overrideJson"),
+    overrideStatus: document.getElementById("overrideStatus"),
+    saveOverride: document.getElementById("saveOverride"),
+    loadOverride: document.getElementById("loadOverride"),
+    pasteOverride: document.getElementById("pasteOverride"),
+    disableOverride: document.getElementById("disableOverride")
   };
 
   let refreshTimer = null;
@@ -28,6 +35,15 @@
   function setBusy(value) {
     busy = Boolean(value);
     els.retryNow.disabled = busy;
+  }
+
+  function prettyJson(value) {
+    return JSON.stringify(value, null, 2);
+  }
+
+  function setOverrideStatus(text, isError = false) {
+    els.overrideStatus.textContent = text;
+    els.overrideStatus.style.color = isError ? "#991b1b" : "#334155";
   }
 
   function renderSyncBadge(syncState) {
@@ -144,6 +160,78 @@
     }
   }
 
+  async function refreshOverrideConfig() {
+    const response = await sendMessage({ type: "get_battle_override_config" });
+    if (!response || !response.ok) {
+      setOverrideStatus(response?.error || "Could not load replay override", true);
+      return;
+    }
+
+    const config = response.config || { enabled: false, battle: null };
+    els.overrideEnabled.checked = Boolean(config.enabled);
+    els.overrideJson.value = config.battle ? prettyJson(config.battle) : "";
+
+    if (config.enabled) {
+      setOverrideStatus("Replay injection enabled.");
+    } else if (config.battle) {
+      setOverrideStatus("Replay JSON loaded. Enable injection to use it.");
+    } else {
+      setOverrideStatus("No replay override saved.");
+    }
+  }
+
+  async function saveOverrideConfig() {
+    const enabled = Boolean(els.overrideEnabled.checked);
+    const battleText = els.overrideJson.value || "";
+
+    const response = await sendMessage({
+      type: "set_battle_override_config",
+      enabled,
+      battleText
+    });
+
+    if (!response || !response.ok) {
+      setOverrideStatus(response?.error || "Could not save replay override", true);
+      return;
+    }
+
+    const config = response.config || { enabled: false, battle: null };
+    els.overrideEnabled.checked = Boolean(config.enabled);
+    els.overrideJson.value = config.battle ? prettyJson(config.battle) : "";
+    setOverrideStatus(config.enabled ? "Saved. Injection is now active." : "Saved. Injection is disabled.");
+  }
+
+  async function disableOverrideConfig() {
+    const response = await sendMessage({
+      type: "set_battle_override_config",
+      enabled: false,
+      battleText: ""
+    });
+
+    if (!response || !response.ok) {
+      setOverrideStatus(response?.error || "Could not disable replay override", true);
+      return;
+    }
+
+    els.overrideEnabled.checked = false;
+    setOverrideStatus("Injection disabled. Saved replay cleared.");
+  }
+
+  async function pasteOverrideFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        setOverrideStatus("Clipboard is empty.", true);
+        return;
+      }
+
+      els.overrideJson.value = text;
+      setOverrideStatus("Pasted from clipboard. Click Save Override.");
+    } catch (error) {
+      setOverrideStatus(error?.message || "Clipboard access failed.", true);
+    }
+  }
+
   async function retryUploadNow() {
     if (busy) {
       return;
@@ -204,14 +292,31 @@
     els.retryNow.addEventListener("click", () => {
       void retryUploadNow();
     });
+
     els.openProfile.addEventListener("click", () => {
       void openMyProfile();
+    });
+
+    els.saveOverride.addEventListener("click", () => {
+      void saveOverrideConfig();
+    });
+
+    els.loadOverride.addEventListener("click", () => {
+      void refreshOverrideConfig();
+    });
+
+    els.pasteOverride.addEventListener("click", () => {
+      void pasteOverrideFromClipboard();
+    });
+
+    els.disableOverride.addEventListener("click", () => {
+      void disableOverrideConfig();
     });
   }
 
   async function init() {
     bindEvents();
-    await refreshState();
+    await Promise.all([refreshState(), refreshOverrideConfig()]);
 
     refreshTimer = window.setInterval(() => {
       void refreshState();
