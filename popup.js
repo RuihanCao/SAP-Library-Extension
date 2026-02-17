@@ -14,7 +14,8 @@
     saveOverride: document.getElementById("saveOverride"),
     loadOverride: document.getElementById("loadOverride"),
     pasteOverride: document.getElementById("pasteOverride"),
-    disableOverride: document.getElementById("disableOverride")
+    disableOverride: document.getElementById("disableOverride"),
+    forceBattleFetch: document.getElementById("forceBattleFetch")
   };
 
   let refreshTimer = null;
@@ -35,6 +36,7 @@
   function setBusy(value) {
     busy = Boolean(value);
     els.retryNow.disabled = busy;
+    els.forceBattleFetch.disabled = busy;
   }
 
   function prettyJson(value) {
@@ -232,6 +234,54 @@
     }
   }
 
+  function randomUuid() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+      const random = Math.floor(Math.random() * 16);
+      const value = token === "x" ? random : ((random & 0x3) | 0x8);
+      return value.toString(16);
+    });
+  }
+
+  async function forceBattleFetchNow() {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const activeTab = tabs && tabs[0];
+
+      if (!activeTab || typeof activeTab.id !== "number") {
+        throw new Error("No active tab found.");
+      }
+
+      const battleId = randomUuid();
+      const response = await chrome.tabs.sendMessage(activeTab.id, {
+        type: "force_battle_fetch",
+        battleId,
+        timeoutMs: 10000
+      });
+
+      if (!response || !response.ok) {
+        throw new Error(
+          response?.error ||
+          "Could not force battle request in this tab. Open SAP game tab first."
+        );
+      }
+
+      const statusText = Number.isFinite(response.status)
+        ? `status ${response.status}`
+        : "no status";
+      const responseIdText = response.responseId ? `, response Id ${response.responseId}` : "";
+
+      setOverrideStatus(
+        `Forced battle request (${statusText}) for ${response.battleId || battleId}${responseIdText}.`
+      );
+    } catch (error) {
+      setOverrideStatus(error?.message || "Force battle request failed.", true);
+    }
+  }
+
   async function retryUploadNow() {
     if (busy) {
       return;
@@ -311,6 +361,10 @@
 
     els.disableOverride.addEventListener("click", () => {
       void disableOverrideConfig();
+    });
+
+    els.forceBattleFetch.addEventListener("click", () => {
+      void forceBattleFetchNow();
     });
   }
 

@@ -459,7 +459,16 @@
     return output;
   }
 
-  function buildBoard(boardId, packName, rawPets, displayLabel, unknownWarnings, missingAbilityWarnings) {
+  function buildBoard(
+    boardId,
+    packName,
+    rawPets,
+    displayLabel,
+    unknownWarnings,
+    missingAbilityWarnings,
+    options = {}
+  ) {
+    const reverseInputOrder = Boolean(options.reverseInputOrder);
     const items = new Array(5).fill(null);
     const warningBag = {
       unknownPets: [],
@@ -468,7 +477,8 @@
 
     for (let i = 0; i < 5; i += 1) {
       const uniqueId = 100 + i;
-      items[i] = buildMinion(rawPets[i], i, boardId, uniqueId, warningBag);
+      const sourceIndex = reverseInputOrder ? (4 - i) : i;
+      items[i] = buildMinion(rawPets[sourceIndex], i, boardId, uniqueId, warningBag);
     }
 
     unknownWarnings.push(...warningBag.unknownPets);
@@ -582,7 +592,8 @@
         playerPets,
         "Calculator",
         unknownWarnings,
-        missingAbilityWarnings
+        missingAbilityWarnings,
+        { reverseInputOrder: false }
       ),
       Opponent: {
         Id: randomUuid(),
@@ -594,7 +605,8 @@
         opponentPets,
         "Opponent",
         unknownWarnings,
-        missingAbilityWarnings
+        missingAbilityWarnings,
+        { reverseInputOrder: true }
       ),
       EndResult: randomHash()
     };

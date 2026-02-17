@@ -6,6 +6,7 @@
   };
 
   let latestOverrideConfig = EMPTY_OVERRIDE_CONFIG;
+  const pendingForceFetch = new Map();
 
   function injectPageHook() {
     const script = document.createElement("script");
@@ -58,6 +59,23 @@
     });
   }
 
+  function createNonce() {
+    const randomPart = Math.random().toString(36).slice(2, 10);
+    return `${Date.now()}-${randomPart}`;
+  }
+
+  function resolvePendingForceFetch(nonce, payload) {
+    if (typeof nonce !== "string" || !pendingForceFetch.has(nonce)) {
+      return false;
+    }
+
+    const pending = pendingForceFetch.get(nonce);
+    pendingForceFetch.delete(nonce);
+    window.clearTimeout(pending.timeoutId);
+    pending.sendResponse(payload);
+    return true;
+  }
+
   async function refreshOverrideConfig() {
     const response = await sendMessageToWorker({ type: "get_battle_override_config" });
     if (response?.ok) {
@@ -80,13 +98,39 @@
   injectPageHook();
   void refreshOverrideConfig();
 
-  chrome.runtime.onMessage.addListener((message) => {
-    if (!message || message.type !== "battle_override_updated") {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || typeof message !== "object") {
       return;
     }
 
-    latestOverrideConfig = normalizeOverrideConfig(message.config);
-    pushOverrideConfig();
+    if (message.type === "battle_override_updated") {
+      latestOverrideConfig = normalizeOverrideConfig(message.config);
+      pushOverrideConfig();
+      return;
+    }
+
+    if (message.type === "force_battle_fetch") {
+      const nonce = typeof message.nonce === "string" && message.nonce ? message.nonce : createNonce();
+      const timeoutMsRaw = Number(message.timeoutMs);
+      const timeoutMs = Number.isFinite(timeoutMsRaw)
+        ? Math.min(15000, Math.max(1500, Math.round(timeoutMsRaw)))
+        : 9000;
+
+      const timeoutId = window.setTimeout(() => {
+        resolvePendingForceFetch(nonce, {
+          ok: false,
+          error: "Timed out waiting for forced battle request result."
+        });
+      }, timeoutMs);
+
+      pendingForceFetch.set(nonce, { sendResponse, timeoutId });
+      postToPage({
+        type: "force_battle_fetch",
+        battleId: message.battleId || null,
+        nonce
+      });
+      return true;
+    }
   });
 
   window.addEventListener("message", (event) => {
@@ -101,6 +145,22 @@
 
     if (message.type === "battle_override_request") {
       void refreshOverrideConfig();
+      return;
+    }
+
+    if (message.type === "forced_battle_fetch_result") {
+      const handled = resolvePendingForceFetch(message.nonce, {
+        ok: Boolean(message.ok),
+        status: Number.isFinite(Number(message.status)) ? Number(message.status) : null,
+        battleId: typeof message.battleId === "string" ? message.battleId : null,
+        responseId: typeof message.responseId === "string" ? message.responseId : null,
+        error: typeof message.error === "string" ? message.error : null
+      });
+
+      if (!handled) {
+        // Unsolicited result; useful for page-level debugging.
+        console.info("[SAP Extension] Forced battle fetch result:", message);
+      }
       return;
     }
 

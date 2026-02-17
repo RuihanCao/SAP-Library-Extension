@@ -1,6 +1,7 @@
 (() => {
   const MARKER = "__sap_library_uploader__";
   const API_HOST = /https:\/\/api\.teamwood\.games\//i;
+  const API_VERSION_PATH = /https:\/\/api\.teamwood\.games\/(0\.\d+)\//i;
   const WATCH_PATH = /\/0\.\d+\/api\/(arena\/watch|versus\/watch)$/i;
   const HISTORY_PATH = /\/0\.\d+\/api\/history\/fetch$/i;
   const BATTLE_GET_PATH = /\/0\.\d+\/api\/battle\/get\/([0-9a-f-]{36})$/i;
@@ -8,11 +9,13 @@
   const JSON_HEADERS = {
     "Content-Type": "application/json; charset=utf-8"
   };
+  const FALLBACK_API_VERSION = "0.45";
 
   const battleOverride = {
     enabled: false,
     battle: null
   };
+  let latestApiVersion = FALLBACK_API_VERSION;
 
   function post(payload) {
     window.postMessage({ [MARKER]: true, ...payload }, "*");
@@ -23,6 +26,17 @@
       return new URL(String(value || ""), window.location.href).toString();
     } catch {
       return "";
+    }
+  }
+
+  function trackApiVersion(url) {
+    if (typeof url !== "string" || !url) {
+      return;
+    }
+
+    const match = url.match(API_VERSION_PATH);
+    if (match && typeof match[1] === "string") {
+      latestApiVersion = match[1];
     }
   }
 
@@ -60,6 +74,18 @@
     }
   }
 
+  function createUuid() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+      const random = Math.floor(Math.random() * 16);
+      const value = token === "x" ? random : ((random & 0x3) | 0x8);
+      return value.toString(16);
+    });
+  }
+
   function buildBattleOverrideText(url) {
     if (!battleOverride.enabled || !battleOverride.battle || typeof battleOverride.battle !== "object") {
       return null;
@@ -87,6 +113,41 @@
   function applyBattleOverrideConfig(message) {
     battleOverride.enabled = Boolean(message.enabled);
     battleOverride.battle = cloneJson(message.battle);
+  }
+
+  async function forceBattleFetch(rawBattleId, nonce) {
+    const battleId = normalizeUuid(rawBattleId) || createUuid();
+    const url = `https://api.teamwood.games/${latestApiVersion}/api/battle/get/${battleId}`;
+
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      const responseText = await response.clone().text();
+      let parsed = null;
+
+      try {
+        parsed = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        parsed = null;
+      }
+
+      post({
+        type: "forced_battle_fetch_result",
+        nonce: typeof nonce === "string" ? nonce : null,
+        ok: response.ok,
+        status: response.status,
+        battleId,
+        responseId: parsed && typeof parsed === "object" ? parsed.Id || null : null
+      });
+    } catch (error) {
+      post({
+        type: "forced_battle_fetch_result",
+        nonce: typeof nonce === "string" ? nonce : null,
+        ok: false,
+        status: null,
+        battleId,
+        error: error && error.message ? error.message : "force_battle_fetch_failed"
+      });
+    }
   }
 
   function dispatchXhrEvent(xhr, type) {
@@ -172,6 +233,11 @@
 
     if (message.type === "set_battle_override") {
       applyBattleOverrideConfig(message);
+      return;
+    }
+
+    if (message.type === "force_battle_fetch") {
+      void forceBattleFetch(message.battleId || null, message.nonce || null);
     }
   });
 
@@ -329,6 +395,7 @@
     if (!API_HOST.test(url)) {
       return;
     }
+    trackApiVersion(url);
 
     try {
       const text = await response.clone().text();
@@ -356,6 +423,7 @@
   window.fetch = function wrappedFetch(input) {
     const request = input instanceof Request ? input : null;
     const url = normalizeUrl(request ? request.url : typeof input === "string" ? input : "");
+    trackApiVersion(url);
     const battleText = buildBattleOverrideText(url);
     if (battleText !== null) {
       return Promise.resolve(new Response(battleText, { status: 200, headers: JSON_HEADERS }));
@@ -371,6 +439,7 @@
 
   XMLHttpRequest.prototype.open = function wrappedOpen(method, url) {
     this.__sapLibraryUploaderUrl = normalizeUrl(url);
+    trackApiVersion(this.__sapLibraryUploaderUrl);
     return originalXhrOpen.apply(this, arguments);
   };
 
