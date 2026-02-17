@@ -1,14 +1,15 @@
 {
   "name": "SAP Library Uploader",
   "description": "Capture finished SAP participation IDs and upload them to SAP Library.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "manifest_version": 3,
   "permissions": [
     "storage",
     "tabs"
   ],
   "host_permissions": [
-    "https://sap-library.vercel.app/*"
+    "https://sap-library.vercel.app/*",
+    "https://api.teamwood.games/*"
   ],
   "background": {
     "service_worker": "service_worker.js"
