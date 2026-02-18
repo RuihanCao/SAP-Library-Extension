@@ -1,6 +1,6 @@
 # SAP Library Extension
 
-Chrome extension that captures finished Super Auto Pets participation IDs and uploads them to a SAP Library API.
+Chrome extension that syncs finished Super Auto Pets participation IDs to SAP Library and includes replay injection/editor tools.
 
 ## What it does
 
@@ -60,7 +60,7 @@ Notes:
 - If an equipment/perk name has no mapping, it is reported in the conversion status.
 - If a pack name has no mapping, it is reported in the conversion status and falls back to Turtle (`Pack: 0`).
 
-### Calculator map sources (local only)
+### Calculator map sources
 
 `calculator_maps.js` is generated from local files inside this repo:
 
