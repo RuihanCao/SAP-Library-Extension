@@ -637,24 +637,82 @@
     return mapped.length > 0 ? mapped[0] : null;
   }
 
+  function buildBelugaSwallowedEntry(swallowedRaw) {
+    const swallowedPetId = resolvePetIdFromUnknown(swallowedRaw);
+    if (!Number.isFinite(swallowedPetId)) {
+      return null;
+    }
+
+    const entry = { Enu: swallowedPetId };
+    if (!isPlainObject(swallowedRaw)) {
+      return entry;
+    }
+
+    const attack = toFiniteNumber(swallowedRaw.attack ?? swallowedRaw.At ?? swallowedRaw.at, NaN);
+    if (Number.isFinite(attack)) {
+      entry.At = Math.max(0, Math.round(attack));
+    }
+
+    const health = toFiniteNumber(swallowedRaw.health ?? swallowedRaw.Hp ?? swallowedRaw.hp, NaN);
+    if (Number.isFinite(health)) {
+      entry.Hp = Math.max(1, Math.round(health));
+    }
+
+    const mana = toFiniteNumber(swallowedRaw.mana ?? swallowedRaw.Mana, NaN);
+    if (Number.isFinite(mana)) {
+      entry.Mana = Math.max(0, Math.round(mana));
+    }
+
+    const level = toFiniteNumber(swallowedRaw.level ?? swallowedRaw.lvl ?? swallowedRaw.Lvl, NaN);
+    if (Number.isFinite(level)) {
+      entry.Lvl = clampInt(level, 1, 3);
+    }
+
+    const exp = toFiniteNumber(swallowedRaw.exp ?? swallowedRaw.Exp, NaN);
+    if (Number.isFinite(exp)) {
+      entry.Exp = Math.max(0, Math.round(exp));
+    }
+
+    const perkId = resolvePerkId(swallowedRaw);
+    if (Number.isFinite(perkId)) {
+      entry.Perk = perkId;
+    }
+
+    return entry;
+  }
+
   function buildBelugaMemory(rawPet, petId) {
-    const swallowedId = resolvePetIdFromUnknown(
-      rawPet?.belugaSwallowedPet ?? rawPet?.swallowedPet ?? null
-    );
-
-    if (!Number.isFinite(swallowedId)) {
+    const swallowedRaw = rawPet?.belugaSwallowedPet ?? rawPet?.swallowedPet ?? null;
+    const swallowedEntry = buildBelugaSwallowedEntry(swallowedRaw);
+    if (!swallowedEntry) {
       return null;
     }
 
-    const abilityEnum = getPrimaryAbilityEnumForMemory(rawPet, petId);
-    if (!Number.isFinite(abilityEnum)) {
+    const mappedAbilityEnums = getAbilityEnumsForPet(petId);
+    const primaryAbilityEnum = getPrimaryAbilityEnumForMemory(rawPet, petId);
+    const belugaAbilityEnums = mappedAbilityEnums.length > 0
+      ? mappedAbilityEnums
+      : (Number.isFinite(primaryAbilityEnum) ? [Math.trunc(primaryAbilityEnum)] : []);
+    if (belugaAbilityEnums.length === 0) {
       return null;
     }
+
+    const lists = {
+      WhiteWhaleAbility: [{ ...swallowedEntry }]
+    };
+    for (const abilityEnum of belugaAbilityEnums) {
+      lists[String(abilityEnum)] = [{ ...swallowedEntry }];
+    }
+
+    replayDebug("Beluga memory build", {
+      petName: rawPet?.name || null,
+      petId,
+      belugaAbilityEnums,
+      swallowedEntry
+    });
 
     return {
-      Lsts: {
-        [String(abilityEnum)]: [{ Enu: swallowedId }]
-      }
+      Lsts: lists
     };
   }
 
@@ -1092,7 +1150,10 @@
       } else if (minionMemory && Number.isFinite(primaryAbilityEnum)) {
         abilityEnums = [Math.trunc(primaryAbilityEnum)];
       }
-    } else if (minionMemory && Number.isFinite(primaryAbilityEnum)) {
+    } else if (minionMemory && Number.isFinite(primaryAbilityEnum) && petId !== 182) {
+      abilityEnums = [Math.trunc(primaryAbilityEnum)];
+    }
+    if (petId === 182 && abilityEnums.length === 0 && Number.isFinite(primaryAbilityEnum)) {
       abilityEnums = [Math.trunc(primaryAbilityEnum)];
     }
     if (abilityEnums.length === 0) {
