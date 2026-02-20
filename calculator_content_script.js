@@ -619,6 +619,14 @@
           memoryEntry.MiMs = {
             Lsts: belugaLists
           };
+
+          entries.push({
+            swallowedPetId,
+            swallowedAbilityEnums,
+            memoryEntry,
+            belugaSwallowedEntry
+          });
+          continue;
         }
       }
 
@@ -800,10 +808,10 @@
       : [];
     const lists = {};
     for (const entry of swallowedEntries) {
-      const keyEnums = uniqueNumbers([
-        ...(Array.isArray(entry.swallowedAbilityEnums) ? entry.swallowedAbilityEnums : []),
-        ...fallbackAbilityEnums
-      ]);
+      const ownKeyEnums = uniqueNumbers(
+        Array.isArray(entry.swallowedAbilityEnums) ? entry.swallowedAbilityEnums : []
+      );
+      const keyEnums = ownKeyEnums.length > 0 ? ownKeyEnums : fallbackAbilityEnums;
       if (keyEnums.length === 0) {
         continue;
       }
@@ -813,7 +821,16 @@
         if (!Array.isArray(lists[key])) {
           lists[key] = [];
         }
-        lists[key].push(entry.memoryEntry || { Enu: entry.swallowedPetId });
+        const useBelugaInnerEntry = (
+          entry.swallowedPetId === 182
+          && Array.isArray(entry.swallowedAbilityEnums)
+          && entry.swallowedAbilityEnums.includes(keyEnum)
+          && entry.belugaSwallowedEntry
+        );
+        const payloadEntry = useBelugaInnerEntry
+          ? entry.belugaSwallowedEntry
+          : (entry.memoryEntry || { Enu: entry.swallowedPetId });
+        lists[key].push(payloadEntry);
       }
     }
 
