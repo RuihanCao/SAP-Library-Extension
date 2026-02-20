@@ -51,6 +51,80 @@
   const DEFAULT_BACKGROUND_ID = Number.isFinite(maps?.defaults?.backgroundId) ? maps.defaults.backgroundId : 0;
   const DEFAULT_MASCOT_ID = Number.isFinite(maps?.defaults?.mascotId) ? maps.defaults.mascotId : 18;
   const DEFAULT_COSMETIC_ID = Number.isFinite(maps?.defaults?.cosmeticId) ? maps.defaults.cosmeticId : 0;
+  const FALLBACK_TOY_IDS_BY_NAME = {
+    actionfigure: 294,
+    airpalmtree: 511,
+    balloon: 479,
+    boot: 299,
+    bowlingball: 300,
+    brokenpiggybank: 310,
+    broom: 301,
+    candelabra: 574,
+    cardboardbox: 302,
+    chocolatebox: 794,
+    crumpledpaper: 482,
+    crystalball: 580,
+    deckofcards: 303,
+    dice: 304,
+    dicecup: 286,
+    evilbook: 645,
+    excalibur: 583,
+    flashlight: 484,
+    flute: 485,
+    foamsword: 507,
+    garlicpress: 509,
+    glassshoes: 586,
+    goldenharp: 589,
+    handkerchief: 306,
+    holygrail: 592,
+    kite: 307,
+    lamp: 506,
+    lockofhair: 595,
+    lunchbox: 308,
+    magiccarpet: 598,
+    magiclamp: 575,
+    magicmirror: 578,
+    magicwand: 581,
+    melonhelmet: 510,
+    microwaveoven: 699,
+    nutcracker: 584,
+    ocarina: 587,
+    onesie: 590,
+    ovenmitts: 311,
+    pandorasbox: 593,
+    papershredder: 312,
+    peanutjar: 512,
+    pen: 313,
+    pickaxe: 599,
+    pillbottle: 284,
+    plasticsaw: 789,
+    pogostick: 314,
+    radio: 488,
+    redcape: 576,
+    remotecar: 315,
+    ring: 582,
+    ringpyramid: 316,
+    rockbag: 285,
+    rosebud: 579,
+    rubberduck: 318,
+    scale: 795,
+    scissors: 319,
+    soccerball: 486,
+    stickyhand: 792,
+    stinkysock: 513,
+    stuffedbear: 324,
+    television: 491,
+    tennisball: 478,
+    thunderhammer: 585,
+    tinderbox: 588,
+    toiletpaper: 326,
+    toygun: 493,
+    toymouse: 327,
+    treasurechest: 591,
+    treasuremap: 594,
+    vacuumcleaner: 793,
+    witchbroom: 600
+  };
 
   function isPlainObject(value) {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -312,6 +386,122 @@
     return Number.isFinite(mapped) ? mapped : null;
   }
 
+  function resolvePetIdFromUnknown(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (isPlainObject(value)) {
+      const directIdCandidates = [value.id, value.petId, value.enum, value.Enu];
+      for (const candidate of directIdCandidates) {
+        const numeric = toFiniteNumber(candidate, NaN);
+        if (Number.isFinite(numeric)) {
+          return Math.trunc(numeric);
+        }
+      }
+
+      const lookupKey = normalizeLookupKey(value.name);
+      if (lookupKey && Number.isFinite(maps?.petIdsByName?.[lookupKey])) {
+        return maps.petIdsByName[lookupKey];
+      }
+
+      return null;
+    }
+
+    const numeric = toFiniteNumber(value, NaN);
+    if (Number.isFinite(numeric)) {
+      return Math.trunc(numeric);
+    }
+
+    const lookupKey = normalizeLookupKey(value);
+    if (!lookupKey) {
+      return null;
+    }
+
+    const mapped = maps?.petIdsByName?.[lookupKey];
+    return Number.isFinite(mapped) ? mapped : null;
+  }
+
+  function uniqueNumbers(values) {
+    const output = [];
+    const seen = new Set();
+    for (const value of values) {
+      const numeric = toFiniteNumber(value, NaN);
+      if (!Number.isFinite(numeric)) {
+        continue;
+      }
+
+      const normalized = Math.trunc(numeric);
+      if (seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      output.push(normalized);
+    }
+    return output;
+  }
+
+  function buildBelugaMemory(rawPet) {
+    const swallowedId = resolvePetIdFromUnknown(
+      rawPet?.belugaSwallowedPet ?? rawPet?.swallowedPet ?? null
+    );
+
+    if (!Number.isFinite(swallowedId)) {
+      return null;
+    }
+
+    return {
+      Lsts: {
+        WhiteWhaleAbility: [{ Enu: swallowedId }]
+      }
+    };
+  }
+
+  function buildAbominationMemory(rawPet) {
+    const candidateValues = [
+      rawPet?.abominationSwallowedPet1,
+      rawPet?.abominationSwallowedPet2,
+      rawPet?.abominationSwallowedPet3
+    ];
+
+    if (Array.isArray(rawPet?.abominationSwallowedPets)) {
+      candidateValues.push(...rawPet.abominationSwallowedPets);
+    }
+
+    const swallowedIds = uniqueNumbers(candidateValues.map((candidate) => resolvePetIdFromUnknown(candidate)));
+    if (swallowedIds.length === 0) {
+      return null;
+    }
+
+    return {
+      Lsts: {
+        AbominationAbility: swallowedIds.map((swallowedId) => ({ Enu: swallowedId }))
+      }
+    };
+  }
+
+  function buildMinionMemory(rawPet, petId) {
+    const hasBelugaField =
+      rawPet?.belugaSwallowedPet !== null && rawPet?.belugaSwallowedPet !== undefined ||
+      rawPet?.swallowedPet !== null && rawPet?.swallowedPet !== undefined;
+    if (petId === 182 || hasBelugaField) {
+      return buildBelugaMemory(rawPet);
+    }
+
+    const hasAbominationFields = (
+      rawPet?.abominationSwallowedPet1 !== null && rawPet?.abominationSwallowedPet1 !== undefined ||
+      rawPet?.abominationSwallowedPet2 !== null && rawPet?.abominationSwallowedPet2 !== undefined ||
+      rawPet?.abominationSwallowedPet3 !== null && rawPet?.abominationSwallowedPet3 !== undefined ||
+      Array.isArray(rawPet?.abominationSwallowedPets)
+    );
+    if (petId === 373 || petId === 338 || hasAbominationFields) {
+      return buildAbominationMemory(rawPet);
+    }
+
+    return null;
+  }
+
   function resolvePerkId(rawPet) {
     const perkName = getEquipmentName(rawPet);
     const lookupKey = normalizeLookupKey(perkName);
@@ -321,6 +511,81 @@
 
     const mapped = maps?.perkIdsByName?.[lookupKey];
     return Number.isFinite(mapped) ? mapped : null;
+  }
+
+  function getToyName(rawToy) {
+    if (typeof rawToy === "string") {
+      return rawToy;
+    }
+    if (isPlainObject(rawToy) && typeof rawToy.name === "string") {
+      return rawToy.name;
+    }
+    return null;
+  }
+
+  function resolveToyId(rawToy) {
+    if (rawToy === null || rawToy === undefined) {
+      return null;
+    }
+
+    if (isPlainObject(rawToy)) {
+      const directCandidates = [rawToy.id, rawToy.toyId, rawToy.enum, rawToy.Enu];
+      for (const candidate of directCandidates) {
+        const numeric = toFiniteNumber(candidate, NaN);
+        if (Number.isFinite(numeric)) {
+          return Math.trunc(numeric);
+        }
+      }
+    }
+
+    const toyName = getToyName(rawToy);
+    const lookupKey = normalizeLookupKey(toyName ?? rawToy);
+    if (!lookupKey) {
+      return null;
+    }
+
+    const mappedFromPrimary = maps?.toyIdsByName?.[lookupKey];
+    if (Number.isFinite(mappedFromPrimary)) {
+      return mappedFromPrimary;
+    }
+
+    const mappedFromFallback = FALLBACK_TOY_IDS_BY_NAME[lookupKey];
+    return Number.isFinite(mappedFromFallback) ? mappedFromFallback : null;
+  }
+
+  function resolveToyLevel(rawLevel) {
+    return clampInt(rawLevel, 1, 3);
+  }
+
+  function buildRelicItems(boardId, rawToy, rawToyLevel, warningBag) {
+    const toyId = resolveToyId(rawToy);
+    const toyName = getToyName(rawToy) || (typeof rawToy === "string" ? rawToy : "");
+    if (!Number.isFinite(toyId)) {
+      if (toyName) {
+        warningBag.unknownToys.push(String(toyName));
+      }
+      return [null, null];
+    }
+
+    const toyLevel = resolveToyLevel(rawToyLevel);
+    return [
+      {
+        Pow: null,
+        Sto: null,
+        Con: null,
+        Reli: null,
+        Buff: false,
+        Link: null,
+        Enu: toyId,
+        Lvl: toyLevel,
+        Id: { BoId: boardId, Uni: 900 },
+        Pri: 3,
+        Fro: false,
+        WFro: false,
+        AFro: false
+      },
+      null
+    ];
   }
 
   function levelFromPet(rawPet) {
@@ -354,13 +619,17 @@
     return 0;
   }
 
-  function buildAbilityEntry(abilityEnum, level) {
+  function buildAbilityEntry(abilityEnum, level, triggersConsumed) {
+    const normalizedTriggersConsumed = Number.isFinite(triggersConsumed)
+      ? Math.max(0, Math.round(triggersConsumed))
+      : 0;
+
     return {
       Enu: abilityEnum,
       Lvl: level,
       Nat: true,
       Dur: 0,
-      TrCo: 0,
+      TrCo: normalizedTriggersConsumed,
       Char: null,
       Dis: false,
       AIML: false,
@@ -369,6 +638,110 @@
       AcCo: 0,
       DisT: false
     };
+  }
+
+  function findFiniteNumberByKeyPredicate(source, keyPredicate) {
+    if (!isPlainObject(source)) {
+      return null;
+    }
+
+    for (const [key, value] of Object.entries(source)) {
+      if (!keyPredicate(key)) {
+        continue;
+      }
+
+      const numeric = toFiniteNumber(value, NaN);
+      if (Number.isFinite(numeric)) {
+        return numeric;
+      }
+    }
+
+    return null;
+  }
+
+  function getTriggersConsumedFromRawPet(rawPet) {
+    const directCandidates = [
+      rawPet?.triggersConsumed,
+      rawPet?.TrCo,
+      rawPet?.trco,
+      rawPet?.triggerConsumed
+    ];
+    for (const candidate of directCandidates) {
+      const numeric = toFiniteNumber(candidate, NaN);
+      if (Number.isFinite(numeric)) {
+        return Math.max(0, Math.round(numeric));
+      }
+    }
+
+    const triggerConsumedKeyPattern = (key) => {
+      const normalized = String(key || "").toLowerCase();
+      const hasTrigger = normalized.includes("trigger") || normalized.includes("trig");
+      const hasConsumed = normalized.includes("consum");
+      const isAbbrev = ["trgc", "trgcn", "trc", "trcn", "trco"].includes(normalized);
+      return (hasTrigger && hasConsumed) || isAbbrev;
+    };
+
+    const objectCandidates = [rawPet, rawPet?.pow, rawPet?.Pow];
+    for (const candidate of objectCandidates) {
+      const numeric = findFiniteNumberByKeyPredicate(candidate, triggerConsumedKeyPattern);
+      if (Number.isFinite(numeric)) {
+        return Math.max(0, Math.round(numeric));
+      }
+    }
+
+    const abilityArrays = [rawPet?.abilities, rawPet?.Abil];
+    const abilityValues = [];
+    for (const abilityArray of abilityArrays) {
+      if (!Array.isArray(abilityArray)) {
+        continue;
+      }
+
+      for (const ability of abilityArray) {
+        const numeric = findFiniteNumberByKeyPredicate(ability, triggerConsumedKeyPattern);
+        if (Number.isFinite(numeric)) {
+          abilityValues.push(numeric);
+        }
+      }
+    }
+    if (abilityValues.length > 0) {
+      return Math.max(0, Math.round(Math.max(...abilityValues)));
+    }
+
+    return null;
+  }
+
+  function getTimesHurtFromRawPet(rawPet) {
+    const directCandidates = [
+      rawPet?.timesHurt,
+      rawPet?.TimesHurt,
+      rawPet?.Pow?.SabertoothTigerAbility,
+      rawPet?.pow?.SabertoothTigerAbility
+    ];
+    for (const candidate of directCandidates) {
+      const numeric = toFiniteNumber(candidate, NaN);
+      if (Number.isFinite(numeric)) {
+        return Math.max(0, Math.round(numeric));
+      }
+    }
+
+    return null;
+  }
+
+  function getSpellCountFromRawPet(rawPet) {
+    const directCandidates = [
+      rawPet?.spellCount,
+      rawPet?.spellsCast,
+      rawPet?.spellsCastThisTurn,
+      rawPet?.SpCT
+    ];
+    for (const candidate of directCandidates) {
+      const numeric = toFiniteNumber(candidate, NaN);
+      if (Number.isFinite(numeric)) {
+        return Math.max(0, Math.round(numeric));
+      }
+    }
+
+    return 0;
   }
 
   function buildMinion(rawPet, position, boardId, uniqueId, warningBag) {
@@ -387,6 +760,7 @@
 
     const attack = Math.max(0, Math.round(toFiniteNumber(rawPet.attack, 1)));
     const health = Math.max(1, Math.round(toFiniteNumber(rawPet.health, 1)));
+    const mana = Math.max(0, Math.round(toFiniteNumber(rawPet.mana, 0)));
     const perkId = resolvePerkId(rawPet);
 
     const abilityMap = maps?.abilityIdsByPetId || {};
@@ -398,6 +772,11 @@
     const abilityEnums = hasAbilityMapping && Array.isArray(abilityMap[abilityMapKey])
       ? abilityMap[abilityMapKey]
       : [];
+    const minionMemory = buildMinionMemory(rawPet, petId);
+    const triggersConsumed = getTriggersConsumedFromRawPet(rawPet);
+    const timesHurt = getTimesHurtFromRawPet(rawPet);
+    const spellCount = getSpellCountFromRawPet(rawPet);
+    const powerData = Number.isFinite(timesHurt) ? { SabertoothTigerAbility: timesHurt } : null;
 
     return {
       Own: 1,
@@ -408,7 +787,7 @@
       Lvl: level,
       Hp: { Perm: health, Temp: 0, Max: null },
       At: { Perm: attack, Temp: 0, Max: null },
-      Mana: 0,
+      Mana: mana,
       Cou: null,
       CoBr: null,
       LaPP: null,
@@ -418,23 +797,23 @@
       PeDM: null,
       PeMu: null,
       PeDr: 0,
-      Abil: abilityEnums.map((abilityEnum) => buildAbilityEntry(abilityEnum, level)),
+      Abil: abilityEnums.map((abilityEnum) => buildAbilityEntry(abilityEnum, level, triggersConsumed)),
       AbDi: false,
       Cosm: DEFAULT_COSMETIC_ID,
       Dead: false,
       Dest: false,
       DeBy: null,
       Link: null,
-      Pow: null,
+      Pow: powerData,
       SeV: null,
       Rwds: 0,
       Rwrd: false,
-      MiMs: null,
+      MiMs: minionMemory,
       SpMe: null,
       Tri: null,
       AtkC: 0,
       HrtC: 0,
-      SpCT: 0,
+      SpCT: spellCount,
       OlTs: null,
       Id: { BoId: boardId, Uni: uniqueId },
       Pri: 3,
@@ -466,13 +845,21 @@
     displayLabel,
     unknownWarnings,
     missingAbilityWarnings,
+    unknownToyWarnings,
     options = {}
   ) {
     const reverseInputOrder = Boolean(options.reverseInputOrder);
+    const turnNumber = Math.max(1, Math.round(toFiniteNumber(options.turn, 12)));
+    const goldSpent = Math.max(0, Math.round(toFiniteNumber(options.goldSpent, 10)));
+    const rollAmount = Math.max(0, Math.round(toFiniteNumber(options.rollAmount, 1)));
+    const transformationAmount = Math.max(0, Math.round(toFiniteNumber(options.transformationAmount, 0)));
+    const summonedAmount = Math.max(0, Math.round(toFiniteNumber(options.summonedAmount, 0)));
+    const level3SoldAmount = Math.max(0, Math.round(toFiniteNumber(options.level3SoldAmount, 0)));
     const items = new Array(5).fill(null);
     const warningBag = {
       unknownPets: [],
-      missingAbilityMap: []
+      missingAbilityMap: [],
+      unknownToys: []
     };
 
     for (let i = 0; i < 5; i += 1) {
@@ -481,8 +868,11 @@
       items[i] = buildMinion(rawPets[sourceIndex], i, boardId, uniqueId, warningBag);
     }
 
+    const relicItems = buildRelicItems(boardId, options.toy, options.toyLevel, warningBag);
+
     unknownWarnings.push(...warningBag.unknownPets);
     missingAbilityWarnings.push(...warningBag.missingAbilityMap);
+    unknownToyWarnings.push(...warningBag.unknownToys);
 
     const petEnums = items.filter(Boolean).map((minion) => minion.Enu);
     const packId = resolvePackId(packName);
@@ -501,14 +891,14 @@
       Vic: 0,
       ViMa: null,
       Rec: null,
-      Tur: 12,
+      Tur: turnNumber,
       Go: 0,
       FuGo: null,
-      GoSp: 10,
+      GoSp: goldSpent,
       FrRo: 0,
       FuRo: null,
-      Rold: 1,
-      TrTT: 0,
+      Rold: rollAmount,
+      TrTT: transformationAmount,
       TiMi: null,
       Ti: 6,
       BoCa: 99,
@@ -528,8 +918,8 @@
       PrEn: petEnums,
       PrES: [],
       MiPl: 0,
-      MiSu: 0,
-      MSFL: 0,
+      MiSu: summonedAmount,
+      MSFL: level3SoldAmount,
       SpPl: [],
       SpCo: null,
       Mode: 0,
@@ -545,7 +935,7 @@
       Deck: null,
       Rel: {
         Size: { x: 2, y: 1 },
-        Items: [null, null]
+        Items: relicItems
       },
       Bul: {
         Size: { x: 0, y: 0 },
@@ -571,6 +961,7 @@
 
     const unknownWarnings = [];
     const missingAbilityWarnings = [];
+    const unknownToyWarnings = [];
 
     const userBoardId = randomUuid();
     const opponentBoardId = randomUuid();
@@ -593,7 +984,18 @@
         "Calculator",
         unknownWarnings,
         missingAbilityWarnings,
-        { reverseInputOrder: false }
+        unknownToyWarnings,
+        {
+          reverseInputOrder: false,
+          turn: state.turn,
+          goldSpent: state.playerGoldSpent,
+          rollAmount: state.playerRollAmount,
+          toy: state.playerToy,
+          toyLevel: state.playerToyLevel,
+          summonedAmount: state.playerSummonedAmount,
+          level3SoldAmount: state.playerLevel3Sold,
+          transformationAmount: state.playerTransformationAmount
+        }
       ),
       Opponent: {
         Id: randomUuid(),
@@ -606,7 +1008,18 @@
         "Opponent",
         unknownWarnings,
         missingAbilityWarnings,
-        { reverseInputOrder: true }
+        unknownToyWarnings,
+        {
+          reverseInputOrder: true,
+          turn: state.turn,
+          goldSpent: state.opponentGoldSpent,
+          rollAmount: state.opponentRollAmount,
+          toy: state.opponentToy,
+          toyLevel: state.opponentToyLevel,
+          summonedAmount: state.opponentSummonedAmount,
+          level3SoldAmount: state.opponentLevel3Sold,
+          transformationAmount: state.opponentTransformationAmount
+        }
       ),
       EndResult: randomHash()
     };
@@ -619,7 +1032,8 @@
       },
       warnings: {
         unknownPets: uniqueStrings(unknownWarnings),
-        missingAbilityMap: uniqueStrings(missingAbilityWarnings)
+        missingAbilityMap: uniqueStrings(missingAbilityWarnings),
+        unknownToys: uniqueStrings(unknownToyWarnings)
       }
     };
   }
@@ -791,6 +1205,9 @@
     }
     if (warnings.missingAbilityMap.length > 0) {
       parts.push(`Ability map missing: ${warnings.missingAbilityMap.slice(0, 4).join(", ")}${warnings.missingAbilityMap.length > 4 ? "..." : ""}`);
+    }
+    if (warnings.unknownToys.length > 0) {
+      parts.push(`Unknown toys skipped: ${warnings.unknownToys.slice(0, 4).join(", ")}${warnings.unknownToys.length > 4 ? "..." : ""}`);
     }
     return parts.join(" | ");
   }
