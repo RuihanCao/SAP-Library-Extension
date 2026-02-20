@@ -4,6 +4,47 @@
     return;
   }
 
+  const PARROT_COPY_ABOMINATION_SHORT_TO_LONG_KEY_MAP = (() => {
+    const map = {};
+    for (let outer = 1; outer <= 3; outer += 1) {
+      const base = `parrotCopyPetAbominationSwallowedPet${outer}`;
+      const outerPrefix = `pCPAS${outer}`;
+      map[outerPrefix] = base;
+      map[`${outerPrefix}B`] = `${base}BelugaSwallowedPet`;
+      map[`${outerPrefix}L`] = `${base}Level`;
+      map[`${outerPrefix}T`] = `${base}TimesHurt`;
+      map[`${outerPrefix}PCP`] = `${base}ParrotCopyPet`;
+      map[`${outerPrefix}PCPB`] = `${base}ParrotCopyPetBelugaSwallowedPet`;
+
+      for (let inner = 1; inner <= 3; inner += 1) {
+        const innerBase = `${base}ParrotCopyPetAbominationSwallowedPet${inner}`;
+        const innerPrefix = `${outerPrefix}PCPAS${inner}`;
+        map[innerPrefix] = innerBase;
+        map[`${innerPrefix}B`] = `${innerBase}BelugaSwallowedPet`;
+        map[`${innerPrefix}L`] = `${innerBase}Level`;
+        map[`${innerPrefix}T`] = `${innerBase}TimesHurt`;
+      }
+    }
+    return map;
+  })();
+
+  const ABOMINATION_PARROT_COPY_SHORT_TO_LONG_KEY_MAP = (() => {
+    const map = {};
+    for (let outer = 1; outer <= 3; outer += 1) {
+      const outerPrefix = `aSP${outer}PCPAS`;
+      const outerBase = `abominationSwallowedPet${outer}ParrotCopyPetAbominationSwallowedPet`;
+      for (let inner = 1; inner <= 3; inner += 1) {
+        const innerPrefix = `${outerPrefix}${inner}`;
+        const innerBase = `${outerBase}${inner}`;
+        map[innerPrefix] = innerBase;
+        map[`${innerPrefix}B`] = `${innerBase}BelugaSwallowedPet`;
+        map[`${innerPrefix}L`] = `${innerBase}Level`;
+        map[`${innerPrefix}T`] = `${innerBase}TimesHurt`;
+      }
+    }
+    return map;
+  })();
+
   const SHORT_TO_LONG_KEY_MAP = {
     pP: "playerPack",
     oP: "opponentPack",
@@ -41,7 +82,32 @@
     e: "exp",
     eq: "equipment",
     bSP: "belugaSwallowedPet",
-    tH: "timesHurt"
+    tH: "timesHurt",
+    aSP1: "abominationSwallowedPet1",
+    aSP2: "abominationSwallowedPet2",
+    aSP3: "abominationSwallowedPet3",
+    aSP1L: "abominationSwallowedPet1Level",
+    aSP2L: "abominationSwallowedPet2Level",
+    aSP3L: "abominationSwallowedPet3Level",
+    aSP1B: "abominationSwallowedPet1BelugaSwallowedPet",
+    aSP2B: "abominationSwallowedPet2BelugaSwallowedPet",
+    aSP3B: "abominationSwallowedPet3BelugaSwallowedPet",
+    aSP1SFS: "abominationSwallowedPet1SarcasticFringeheadSwallowedPet",
+    aSP2SFS: "abominationSwallowedPet2SarcasticFringeheadSwallowedPet",
+    aSP3SFS: "abominationSwallowedPet3SarcasticFringeheadSwallowedPet",
+    aSP1T: "abominationSwallowedPet1TimesHurt",
+    aSP2T: "abominationSwallowedPet2TimesHurt",
+    aSP3T: "abominationSwallowedPet3TimesHurt",
+    pCP: "parrotCopyPet",
+    pCPB: "parrotCopyPetBelugaSwallowedPet",
+    aSP1PCP: "abominationSwallowedPet1ParrotCopyPet",
+    aSP2PCP: "abominationSwallowedPet2ParrotCopyPet",
+    aSP3PCP: "abominationSwallowedPet3ParrotCopyPet",
+    aSP1PCPB: "abominationSwallowedPet1ParrotCopyPetBelugaSwallowedPet",
+    aSP2PCPB: "abominationSwallowedPet2ParrotCopyPetBelugaSwallowedPet",
+    aSP3PCPB: "abominationSwallowedPet3ParrotCopyPetBelugaSwallowedPet",
+    ...PARROT_COPY_ABOMINATION_SHORT_TO_LONG_KEY_MAP,
+    ...ABOMINATION_PARROT_COPY_SHORT_TO_LONG_KEY_MAP
   };
 
   const UI_BUTTON_ID = "sapReplayExportButton";
@@ -51,6 +117,11 @@
   const DEFAULT_BACKGROUND_ID = Number.isFinite(maps?.defaults?.backgroundId) ? maps.defaults.backgroundId : 0;
   const DEFAULT_MASCOT_ID = Number.isFinite(maps?.defaults?.mascotId) ? maps.defaults.mascotId : 18;
   const DEFAULT_COSMETIC_ID = Number.isFinite(maps?.defaults?.cosmeticId) ? maps.defaults.cosmeticId : 0;
+  const FALLBACK_ABILITY_IDS_BY_PET_ID = {
+    "338": [368],
+    "373": [403],
+    "635": [669]
+  };
   const FALLBACK_TOY_IDS_BY_NAME = {
     actionfigure: 294,
     airpalmtree: 511,
@@ -135,6 +206,34 @@
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
+  }
+
+  const REPLAY_DEBUG_ENABLED = (() => {
+    try {
+      const fromStorage = localStorage.getItem("sapReplayDebug");
+      if (fromStorage === "1") {
+        return true;
+      }
+    } catch {
+      // Ignore storage access failures.
+    }
+
+    try {
+      return new URL(window.location.href).searchParams.get("sapReplayDebug") === "1";
+    } catch {
+      return false;
+    }
+  })();
+
+  function replayDebug(...args) {
+    if (!REPLAY_DEBUG_ENABLED) {
+      return;
+    }
+    console.log("[SAP Replay Debug]", ...args);
+  }
+
+  function isBlankString(value) {
+    return typeof value === "string" && !value.trim();
   }
 
   function toFiniteNumber(value, fallback = 0) {
@@ -340,6 +439,12 @@
 
     for (const candidate of candidates) {
       if (looksLikeCalculatorState(candidate)) {
+        replayDebug("Extracted calculator state", {
+          hasPlayerPets: Array.isArray(candidate?.playerPets),
+          hasOpponentPets: Array.isArray(candidate?.opponentPets),
+          playerPet0Keys: candidate?.playerPets?.[0] && Object.keys(candidate.playerPets[0]),
+          opponentPet0Keys: candidate?.opponentPets?.[0] && Object.keys(candidate.opponentPets[0])
+        });
         return candidate;
       }
     }
@@ -391,9 +496,16 @@
       return null;
     }
 
+    if (isBlankString(value)) {
+      return null;
+    }
+
     if (isPlainObject(value)) {
       const directIdCandidates = [value.id, value.petId, value.enum, value.Enu];
       for (const candidate of directIdCandidates) {
+        if (isBlankString(candidate)) {
+          continue;
+        }
         const numeric = toFiniteNumber(candidate, NaN);
         if (Number.isFinite(numeric)) {
           return Math.trunc(numeric);
@@ -426,7 +538,10 @@
     const output = [];
     const seen = new Set();
     for (const value of values) {
-      const numeric = toFiniteNumber(value, NaN);
+      if (value === null || value === undefined || isBlankString(value)) {
+        continue;
+      }
+      const numeric = Number(value);
       if (!Number.isFinite(numeric)) {
         continue;
       }
@@ -442,7 +557,87 @@
     return output;
   }
 
-  function buildBelugaMemory(rawPet) {
+  function getAbilityEnumsForPet(petId) {
+    const abilityMap = maps?.abilityIdsByPetId || {};
+    const abilityMapKey = String(petId);
+    const mapped = Array.isArray(abilityMap[abilityMapKey]) ? abilityMap[abilityMapKey] : [];
+    const fallback = Array.isArray(FALLBACK_ABILITY_IDS_BY_PET_ID[abilityMapKey])
+      ? FALLBACK_ABILITY_IDS_BY_PET_ID[abilityMapKey]
+      : [];
+
+    return uniqueNumbers([...mapped, ...fallback]);
+  }
+
+  function collectAbominationSwallowedEntries(rawPet) {
+    const swallowedCandidates = [
+      rawPet?.abominationSwallowedPet1,
+      rawPet?.abominationSwallowedPet2,
+      rawPet?.abominationSwallowedPet3
+    ];
+    if (Array.isArray(rawPet?.abominationSwallowedPets)) {
+      swallowedCandidates.push(...rawPet.abominationSwallowedPets);
+    }
+
+    const entries = [];
+    for (const swallowed of swallowedCandidates) {
+      const swallowedPetId = resolvePetIdFromUnknown(swallowed);
+      if (!Number.isFinite(swallowedPetId)) {
+        continue;
+      }
+
+      const swallowedAbilityEnums = getAbilityEnumsForPet(swallowedPetId);
+      entries.push({
+        swallowedPetId,
+        swallowedAbilityEnum: swallowedAbilityEnums.length > 0 ? swallowedAbilityEnums[0] : null
+      });
+    }
+
+    return entries;
+  }
+
+  function inferAbominationAbilityEnumsFromSwallowedPets(rawPet) {
+    const entries = collectAbominationSwallowedEntries(rawPet);
+    return uniqueNumbers(entries.map((entry) => entry.swallowedAbilityEnum));
+  }
+
+  function inferAbominationAbilityEnumFromSwallowedPets(rawPet) {
+    const inferredEnums = inferAbominationAbilityEnumsFromSwallowedPets(rawPet);
+    return inferredEnums.length > 0 ? inferredEnums[0] : null;
+  }
+
+  function getPrimaryAbilityEnumForMemory(rawPet, petId) {
+    const directCandidates = [
+      rawPet?.abilityEnum,
+      rawPet?.abilityId,
+      rawPet?.Abil?.[0]?.Enu,
+      rawPet?.abilities?.[0]?.Enu
+    ];
+    for (const candidate of directCandidates) {
+      const numeric = toFiniteNumber(candidate, NaN);
+      if (Number.isFinite(numeric)) {
+        return Math.trunc(numeric);
+      }
+    }
+
+    if (petId === 373 || petId === 338) {
+      const inferred = inferAbominationAbilityEnumFromSwallowedPets(rawPet);
+      if (Number.isFinite(inferred)) {
+        replayDebug("Inferred abomination ability from swallowed pets", {
+          petId,
+          abilityEnum: inferred,
+          swallowed1: rawPet?.abominationSwallowedPet1 || null,
+          swallowed2: rawPet?.abominationSwallowedPet2 || null,
+          swallowed3: rawPet?.abominationSwallowedPet3 || null
+        });
+        return inferred;
+      }
+    }
+
+    const mapped = getAbilityEnumsForPet(petId);
+    return mapped.length > 0 ? mapped[0] : null;
+  }
+
+  function buildBelugaMemory(rawPet, petId) {
     const swallowedId = resolvePetIdFromUnknown(
       rawPet?.belugaSwallowedPet ?? rawPet?.swallowedPet ?? null
     );
@@ -451,33 +646,54 @@
       return null;
     }
 
-    return {
-      Lsts: {
-        WhiteWhaleAbility: [{ Enu: swallowedId }]
-      }
-    };
-  }
-
-  function buildAbominationMemory(rawPet) {
-    const candidateValues = [
-      rawPet?.abominationSwallowedPet1,
-      rawPet?.abominationSwallowedPet2,
-      rawPet?.abominationSwallowedPet3
-    ];
-
-    if (Array.isArray(rawPet?.abominationSwallowedPets)) {
-      candidateValues.push(...rawPet.abominationSwallowedPets);
-    }
-
-    const swallowedIds = uniqueNumbers(candidateValues.map((candidate) => resolvePetIdFromUnknown(candidate)));
-    if (swallowedIds.length === 0) {
+    const abilityEnum = getPrimaryAbilityEnumForMemory(rawPet, petId);
+    if (!Number.isFinite(abilityEnum)) {
       return null;
     }
 
     return {
       Lsts: {
-        AbominationAbility: swallowedIds.map((swallowedId) => ({ Enu: swallowedId }))
+        [String(abilityEnum)]: [{ Enu: swallowedId }]
       }
+    };
+  }
+
+  function buildAbominationMemory(rawPet, petId) {
+    const swallowedEntries = collectAbominationSwallowedEntries(rawPet);
+    const swallowedIds = swallowedEntries.map((entry) => entry.swallowedPetId);
+    replayDebug("Abomination swallow extraction", {
+      petName: rawPet?.name || null,
+      petId,
+      swallowedEntries,
+      swallowedIds
+    });
+    if (swallowedEntries.length === 0) {
+      return null;
+    }
+
+    const fallbackAbilityEnum = getPrimaryAbilityEnumForMemory(rawPet, petId);
+    const lists = {};
+    for (const entry of swallowedEntries) {
+      const keyEnum = Number.isFinite(entry.swallowedAbilityEnum)
+        ? Math.trunc(entry.swallowedAbilityEnum)
+        : (Number.isFinite(fallbackAbilityEnum) ? Math.trunc(fallbackAbilityEnum) : null);
+      if (!Number.isFinite(keyEnum)) {
+        continue;
+      }
+
+      const key = String(keyEnum);
+      if (!Array.isArray(lists[key])) {
+        lists[key] = [];
+      }
+      lists[key].push({ Enu: entry.swallowedPetId });
+    }
+
+    if (Object.keys(lists).length === 0) {
+      return null;
+    }
+
+    return {
+      Lsts: lists
     };
   }
 
@@ -486,7 +702,7 @@
       rawPet?.belugaSwallowedPet !== null && rawPet?.belugaSwallowedPet !== undefined ||
       rawPet?.swallowedPet !== null && rawPet?.swallowedPet !== undefined;
     if (petId === 182 || hasBelugaField) {
-      return buildBelugaMemory(rawPet);
+      return buildBelugaMemory(rawPet, petId);
     }
 
     const hasAbominationFields = (
@@ -496,7 +712,7 @@
       Array.isArray(rawPet?.abominationSwallowedPets)
     );
     if (petId === 373 || petId === 338 || hasAbominationFields) {
-      return buildAbominationMemory(rawPet);
+      return buildAbominationMemory(rawPet, petId);
     }
 
     return null;
@@ -557,6 +773,65 @@
     return clampInt(rawLevel, 1, 3);
   }
 
+  function resolveToyAbilityEnum(rawToy, toyId) {
+    if (isPlainObject(rawToy)) {
+      const directCandidates = [
+        rawToy.abilityEnum,
+        rawToy.abilityId,
+        rawToy.Abil?.[0]?.Enu,
+        rawToy.abilities?.[0]?.Enu
+      ];
+      for (const candidate of directCandidates) {
+        const numeric = toFiniteNumber(candidate, NaN);
+        if (Number.isFinite(numeric)) {
+          return Math.trunc(numeric);
+        }
+      }
+    }
+
+    // Observed in live battle payloads: toy ability enum is offset by +32.
+    // Example: 580 -> 612, 594 -> 626.
+    if (Number.isFinite(toyId)) {
+      return Math.trunc(toyId + 32);
+    }
+
+    return null;
+  }
+
+  function resolveToyUsesLeft(rawToy, toyLevel) {
+    if (isPlainObject(rawToy)) {
+      const directCandidates = [rawToy.cou, rawToy.Cou, rawToy.usesLeft, rawToy.charges];
+      for (const candidate of directCandidates) {
+        const numeric = toFiniteNumber(candidate, NaN);
+        if (Number.isFinite(numeric)) {
+          return Math.max(0, Math.round(numeric));
+        }
+      }
+    }
+
+    // Matches observed live payload pattern: L1 => 2, L2 => 1.
+    return Math.max(1, 3 - toyLevel);
+  }
+
+  function resolveToyHealthPerm(rawToy, toyLevel) {
+    if (isPlainObject(rawToy)) {
+      const directCandidates = [
+        rawToy.hp,
+        rawToy.health,
+        rawToy.Hp?.Perm
+      ];
+      for (const candidate of directCandidates) {
+        const numeric = toFiniteNumber(candidate, NaN);
+        if (Number.isFinite(numeric)) {
+          return Math.max(1, Math.round(numeric));
+        }
+      }
+    }
+
+    // Reasonable default that follows observed progression (L1=3, L2=7).
+    return Math.max(1, 3 + ((toyLevel - 1) * 4));
+  }
+
   function buildRelicItems(boardId, rawToy, rawToyLevel, warningBag) {
     const toyId = resolveToyId(rawToy);
     const toyName = getToyName(rawToy) || (typeof rawToy === "string" ? rawToy : "");
@@ -568,23 +843,62 @@
     }
 
     const toyLevel = resolveToyLevel(rawToyLevel);
+    const toyAbilityEnum = resolveToyAbilityEnum(rawToy, toyId);
+    const toyUsesLeft = resolveToyUsesLeft(rawToy, toyLevel);
+    const toyHealthPerm = resolveToyHealthPerm(rawToy, toyLevel);
+
+    // Real battle payloads model relics using the same object shape as minions.
+    // Keep the toy in the second relic slot to match observed API responses.
+    const toyRelic = {
+      Own: 1,
+      Enu: toyId,
+      Loc: 4,
+      Poi: { x: 1, y: 0 },
+      Exp: 0,
+      Lvl: toyLevel,
+      Hp: { Perm: toyHealthPerm, Temp: 0, Max: null },
+      At: { Perm: 1000, Temp: 0, Max: 1000 },
+      Mana: 0,
+      Cou: toyUsesLeft,
+      CoBr: null,
+      LaPP: null,
+      Perk: null,
+      PeBo: false,
+      PeDu: null,
+      PeDM: null,
+      PeMu: null,
+      PeDr: 0,
+      Abil: Number.isFinite(toyAbilityEnum)
+        ? [buildAbilityEntry(toyAbilityEnum, toyLevel, 0)]
+        : [],
+      AbDi: false,
+      Cosm: DEFAULT_COSMETIC_ID,
+      Dead: false,
+      Dest: false,
+      DeBy: null,
+      Link: null,
+      Pow: null,
+      SeV: null,
+      Rwds: 0,
+      Rwrd: false,
+      MiMs: null,
+      SpMe: null,
+      Tri: null,
+      AtkC: 0,
+      HrtC: 0,
+      SpCT: 0,
+      OlTs: null,
+      LastTargetsThisTurn: null,
+      Id: { BoId: boardId, Uni: 900 },
+      Pri: 3,
+      Fro: false,
+      WFro: false,
+      AFro: false
+    };
+
     return [
-      {
-        Pow: null,
-        Sto: null,
-        Con: null,
-        Reli: null,
-        Buff: false,
-        Link: null,
-        Enu: toyId,
-        Lvl: toyLevel,
-        Id: { BoId: boardId, Uni: 900 },
-        Pri: 3,
-        Fro: false,
-        WFro: false,
-        AFro: false
-      },
-      null
+      null,
+      toyRelic
     ];
   }
 
@@ -767,16 +1081,23 @@
       warningBag.missingPerkMap.push(String(perkName));
     }
 
-    const abilityMap = maps?.abilityIdsByPetId || {};
-    const abilityMapKey = String(petId);
-    const hasAbilityMapping = Object.prototype.hasOwnProperty.call(abilityMap, abilityMapKey);
-    if (!hasAbilityMapping) {
+    const primaryAbilityEnum = getPrimaryAbilityEnumForMemory(rawPet, petId);
+    const mappedAbilityEnums = getAbilityEnumsForPet(petId);
+    const minionMemory = buildMinionMemory(rawPet, petId);
+    let abilityEnums = mappedAbilityEnums;
+    if (petId === 373 || petId === 338) {
+      const inferredAbominationAbilityEnums = inferAbominationAbilityEnumsFromSwallowedPets(rawPet);
+      if (inferredAbominationAbilityEnums.length > 0) {
+        abilityEnums = inferredAbominationAbilityEnums;
+      } else if (minionMemory && Number.isFinite(primaryAbilityEnum)) {
+        abilityEnums = [Math.trunc(primaryAbilityEnum)];
+      }
+    } else if (minionMemory && Number.isFinite(primaryAbilityEnum)) {
+      abilityEnums = [Math.trunc(primaryAbilityEnum)];
+    }
+    if (abilityEnums.length === 0) {
       warningBag.missingAbilityMap.push(String(rawPet.name));
     }
-    const abilityEnums = hasAbilityMapping && Array.isArray(abilityMap[abilityMapKey])
-      ? abilityMap[abilityMapKey]
-      : [];
-    const minionMemory = buildMinionMemory(rawPet, petId);
     const triggersConsumed = getTriggersConsumedFromRawPet(rawPet);
     const timesHurt = getTimesHurtFromRawPet(rawPet);
     const spellCount = getSpellCountFromRawPet(rawPet);
