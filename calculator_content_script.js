@@ -596,7 +596,6 @@
       }
 
       const swallowedAbilityEnums = getAbilityEnumsForPet(swallowedPetId);
-      const swallowedAbilityEnum = swallowedAbilityEnums.length > 0 ? swallowedAbilityEnums[0] : null;
       const memoryEntry = buildBelugaSwallowedEntry(swallowedRaw) || { Enu: swallowedPetId };
 
       const swallowedLevel = toFiniteNumber(rawPet?.[slotConfig.levelKey], NaN);
@@ -625,7 +624,7 @@
 
       entries.push({
         swallowedPetId,
-        swallowedAbilityEnum,
+        swallowedAbilityEnums,
         memoryEntry
       });
     }
@@ -647,7 +646,7 @@
       const swallowedAbilityEnums = getAbilityEnumsForPet(swallowedPetId);
       entries.push({
         swallowedPetId,
-        swallowedAbilityEnum: swallowedAbilityEnums.length > 0 ? swallowedAbilityEnums[0] : null,
+        swallowedAbilityEnums,
         memoryEntry: buildBelugaSwallowedEntry(swallowed) || { Enu: swallowedPetId }
       });
     }
@@ -657,7 +656,13 @@
 
   function inferAbominationAbilityEnumsFromSwallowedPets(rawPet) {
     const entries = collectAbominationSwallowedEntries(rawPet);
-    return uniqueNumbers(entries.map((entry) => entry.swallowedAbilityEnum));
+    const abilityEnums = [];
+    for (const entry of entries) {
+      if (Array.isArray(entry.swallowedAbilityEnums)) {
+        abilityEnums.push(...entry.swallowedAbilityEnums);
+      }
+    }
+    return uniqueNumbers(abilityEnums);
   }
 
   function inferAbominationAbilityEnumFromSwallowedPets(rawPet) {
@@ -790,20 +795,26 @@
     }
 
     const fallbackAbilityEnum = getPrimaryAbilityEnumForMemory(rawPet, petId);
+    const fallbackAbilityEnums = Number.isFinite(fallbackAbilityEnum)
+      ? [Math.trunc(fallbackAbilityEnum)]
+      : [];
     const lists = {};
     for (const entry of swallowedEntries) {
-      const keyEnum = Number.isFinite(entry.swallowedAbilityEnum)
-        ? Math.trunc(entry.swallowedAbilityEnum)
-        : (Number.isFinite(fallbackAbilityEnum) ? Math.trunc(fallbackAbilityEnum) : null);
-      if (!Number.isFinite(keyEnum)) {
+      const keyEnums = uniqueNumbers([
+        ...(Array.isArray(entry.swallowedAbilityEnums) ? entry.swallowedAbilityEnums : []),
+        ...fallbackAbilityEnums
+      ]);
+      if (keyEnums.length === 0) {
         continue;
       }
 
-      const key = String(keyEnum);
-      if (!Array.isArray(lists[key])) {
-        lists[key] = [];
+      for (const keyEnum of keyEnums) {
+        const key = String(keyEnum);
+        if (!Array.isArray(lists[key])) {
+          lists[key] = [];
+        }
+        lists[key].push(entry.memoryEntry || { Enu: entry.swallowedPetId });
       }
-      lists[key].push(entry.memoryEntry || { Enu: entry.swallowedPetId });
     }
 
     if (Object.keys(lists).length === 0) {
