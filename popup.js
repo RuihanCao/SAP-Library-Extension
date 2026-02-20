@@ -12,9 +12,6 @@
     syncHistory: document.getElementById("syncHistory"),
     retryNow: document.getElementById("retryNow"),
     openProfile: document.getElementById("openProfile"),
-    participationLookupId: document.getElementById("participationLookupId"),
-    fetchParticipationReplay: document.getElementById("fetchParticipationReplay"),
-    participationLookupStatus: document.getElementById("participationLookupStatus"),
     overrideJson: document.getElementById("overrideJson"),
     overrideStatus: document.getElementById("overrideStatus"),
     saveOverride: document.getElementById("saveOverride")
@@ -73,8 +70,6 @@
     busy = Boolean(value);
     els.retryNow.disabled = busy;
     els.saveOverride.disabled = busy;
-    els.fetchParticipationReplay.disabled = busy;
-    els.participationLookupId.disabled = busy;
   }
 
   function prettyJson(value) {
@@ -88,11 +83,6 @@
     els.sapEmail.disabled = busy;
     els.sapPassword.disabled = busy;
     els.showPasswordToggle.disabled = busy;
-  }
-
-  function setParticipationLookupStatus(text, isError = false) {
-    els.participationLookupStatus.textContent = text;
-    els.participationLookupStatus.style.color = isError ? "#991b1b" : "#334155";
   }
 
   function setOverrideActionText(config) {
@@ -323,74 +313,6 @@
     setOverrideStatus("Saved and enabled replay injection.");
   }
 
-  async function fetchParticipationReplayNow() {
-    if (busy) {
-      return;
-    }
-
-    const participationId = typeof els.participationLookupId.value === "string"
-      ? els.participationLookupId.value.trim()
-      : "";
-    if (!participationId) {
-      setParticipationLookupStatus("Enter a participation ID first.", true);
-      return;
-    }
-
-    const email = typeof els.sapEmail.value === "string" ? els.sapEmail.value.trim() : "";
-    const password = typeof els.sapPassword.value === "string" ? els.sapPassword.value.trim() : "";
-
-    setBusy(true);
-    setParticipationLookupStatus("Fetching replay data...");
-    try {
-      const response = await sendMessage({
-        type: "fetch_participation_replay",
-        participationId,
-        email,
-        password
-      });
-
-      if (!response || !response.ok || !response.battle) {
-        setParticipationLookupStatus(
-          response?.error || "Replay lookup failed.",
-          true
-        );
-        return;
-      }
-
-      const battle = response.battle;
-      els.overrideJson.value = prettyJson(battle);
-
-      const saved = await sendMessage({
-        type: "set_battle_override_config",
-        enabled: false,
-        battle
-      });
-
-      if (saved?.ok && saved.config) {
-        latestOverrideConfig = {
-          enabled: Boolean(saved.config.enabled),
-          battle: saved.config.battle && typeof saved.config.battle === "object" ? saved.config.battle : null
-        };
-      } else {
-        latestOverrideConfig = {
-          enabled: false,
-          battle
-        };
-      }
-
-      setOverrideActionText(latestOverrideConfig);
-      setOverrideStatus("Replay JSON loaded. Click Enable to activate.");
-
-      const source = response.source === "sap_library" ? "SAP Library" : "Teamwood";
-      const battleIdText = response.battleId ? ` Battle ${response.battleId}.` : "";
-      setParticipationLookupStatus(`Loaded from ${source}.${battleIdText}`);
-    } catch (error) {
-      setParticipationLookupStatus(error && error.message ? error.message : "Replay lookup failed.", true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function retryUploadNow() {
     if (busy) {
       return;
@@ -487,10 +409,6 @@
 
     els.saveOverride.addEventListener("click", () => {
       void toggleOverrideConfig();
-    });
-
-    els.fetchParticipationReplay.addEventListener("click", () => {
-      void fetchParticipationReplayNow();
     });
   }
 
