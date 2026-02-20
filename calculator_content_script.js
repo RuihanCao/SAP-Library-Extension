@@ -122,80 +122,6 @@
     "373": [403],
     "635": [669]
   };
-  const FALLBACK_TOY_IDS_BY_NAME = {
-    actionfigure: 294,
-    airpalmtree: 511,
-    balloon: 479,
-    boot: 299,
-    bowlingball: 300,
-    brokenpiggybank: 310,
-    broom: 301,
-    candelabra: 574,
-    cardboardbox: 302,
-    chocolatebox: 794,
-    crumpledpaper: 482,
-    crystalball: 580,
-    deckofcards: 303,
-    dice: 304,
-    dicecup: 286,
-    evilbook: 645,
-    excalibur: 583,
-    flashlight: 484,
-    flute: 485,
-    foamsword: 507,
-    garlicpress: 509,
-    glassshoes: 586,
-    goldenharp: 589,
-    handkerchief: 306,
-    holygrail: 592,
-    kite: 307,
-    lamp: 506,
-    lockofhair: 595,
-    lunchbox: 308,
-    magiccarpet: 598,
-    magiclamp: 575,
-    magicmirror: 578,
-    magicwand: 581,
-    melonhelmet: 510,
-    microwaveoven: 699,
-    nutcracker: 584,
-    ocarina: 587,
-    onesie: 590,
-    ovenmitts: 311,
-    pandorasbox: 593,
-    papershredder: 312,
-    peanutjar: 512,
-    pen: 313,
-    pickaxe: 599,
-    pillbottle: 284,
-    plasticsaw: 789,
-    pogostick: 314,
-    radio: 488,
-    redcape: 576,
-    remotecar: 315,
-    ring: 582,
-    ringpyramid: 316,
-    rockbag: 285,
-    rosebud: 579,
-    rubberduck: 318,
-    scale: 795,
-    scissors: 319,
-    soccerball: 486,
-    stickyhand: 792,
-    stinkysock: 513,
-    stuffedbear: 324,
-    television: 491,
-    tennisball: 478,
-    thunderhammer: 585,
-    tinderbox: 588,
-    toiletpaper: 326,
-    toygun: 493,
-    toymouse: 327,
-    treasurechest: 591,
-    treasuremap: 594,
-    vacuumcleaner: 793,
-    witchbroom: 600
-  };
 
   function isPlainObject(value) {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -754,6 +680,15 @@
     return entry;
   }
 
+  function buildBelugaMemoryPayload(swallowedEntry) {
+    return {
+      Lsts: {
+        WhiteWhaleAbility: [{ ...swallowedEntry }]
+      },
+      Count: 1
+    };
+  }
+
   function buildBelugaMemory(rawPet, petId) {
     const swallowedRaw = rawPet?.belugaSwallowedPet ?? rawPet?.swallowedPet ?? null;
     const swallowedEntry = buildBelugaSwallowedEntry(swallowedRaw);
@@ -761,32 +696,13 @@
       return null;
     }
 
-    const mappedAbilityEnums = getAbilityEnumsForPet(petId);
-    const primaryAbilityEnum = getPrimaryAbilityEnumForMemory(rawPet, petId);
-    const belugaAbilityEnums = mappedAbilityEnums.length > 0
-      ? mappedAbilityEnums
-      : (Number.isFinite(primaryAbilityEnum) ? [Math.trunc(primaryAbilityEnum)] : []);
-    if (belugaAbilityEnums.length === 0) {
-      return null;
-    }
-
-    const lists = {
-      WhiteWhaleAbility: [{ ...swallowedEntry }]
-    };
-    for (const abilityEnum of belugaAbilityEnums) {
-      lists[String(abilityEnum)] = [{ ...swallowedEntry }];
-    }
-
     replayDebug("Beluga memory build", {
       petName: rawPet?.name || null,
       petId,
-      belugaAbilityEnums,
       swallowedEntry
     });
 
-    return {
-      Lsts: lists
-    };
+    return buildBelugaMemoryPayload(swallowedEntry);
   }
 
   function buildAbominationMemory(rawPet, petId) {
@@ -876,10 +792,10 @@
   }
 
   function getToyName(rawToy) {
-    if (typeof rawToy === "string") {
+    if (typeof rawToy === "string" && rawToy.trim()) {
       return rawToy;
     }
-    if (isPlainObject(rawToy) && typeof rawToy.name === "string") {
+    if (isPlainObject(rawToy) && typeof rawToy.name === "string" && rawToy.name.trim()) {
       return rawToy.name;
     }
     return null;
@@ -890,29 +806,14 @@
       return null;
     }
 
-    if (isPlainObject(rawToy)) {
-      const directCandidates = [rawToy.id, rawToy.toyId, rawToy.enum, rawToy.Enu];
-      for (const candidate of directCandidates) {
-        const numeric = toFiniteNumber(candidate, NaN);
-        if (Number.isFinite(numeric)) {
-          return Math.trunc(numeric);
-        }
-      }
-    }
-
     const toyName = getToyName(rawToy);
-    const lookupKey = normalizeLookupKey(toyName ?? rawToy);
+    const lookupKey = normalizeLookupKey(toyName);
     if (!lookupKey) {
       return null;
     }
 
     const mappedFromPrimary = maps?.toyIdsByName?.[lookupKey];
-    if (Number.isFinite(mappedFromPrimary)) {
-      return mappedFromPrimary;
-    }
-
-    const mappedFromFallback = FALLBACK_TOY_IDS_BY_NAME[lookupKey];
-    return Number.isFinite(mappedFromFallback) ? mappedFromFallback : null;
+    return Number.isFinite(mappedFromPrimary) ? mappedFromPrimary : null;
   }
 
   function resolveToyLevel(rawLevel) {
@@ -935,10 +836,11 @@
       }
     }
 
-    // Observed in live battle payloads: toy ability enum is offset by +32.
-    // Example: 580 -> 612, 594 -> 626.
     if (Number.isFinite(toyId)) {
-      return Math.trunc(toyId + 32);
+      const mappedFromPrimary = maps?.toyAbilityEnumsByToyId?.[String(toyId)];
+      if (Number.isFinite(mappedFromPrimary)) {
+        return Math.trunc(mappedFromPrimary);
+      }
     }
 
     return null;
@@ -974,7 +876,7 @@
       }
     }
 
-    // Reasonable default that follows observed progression (L1=3, L2=7).
+    // Fallback when no toy health metadata is available.
     return Math.max(1, 3 + ((toyLevel - 1) * 4));
   }
 
@@ -1015,7 +917,7 @@
       PeMu: null,
       PeDr: 0,
       Abil: Number.isFinite(toyAbilityEnum)
-        ? [buildAbilityEntry(toyAbilityEnum, toyLevel, 0)]
+        ? [buildRelicAbilityEntry(toyAbilityEnum, toyLevel)]
         : [],
       AbDi: false,
       Cosm: DEFAULT_COSMETIC_ID,
@@ -1097,6 +999,14 @@
       Grop: 0,
       AcCo: 0,
       DisT: false
+    };
+  }
+
+  function buildRelicAbilityEntry(abilityEnum, level) {
+    return {
+      Enu: abilityEnum,
+      Lvl: level,
+      Nat: true
     };
   }
 
