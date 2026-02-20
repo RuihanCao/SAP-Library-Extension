@@ -254,6 +254,19 @@
         <h1>Replay Injection</h1>
         <p class="sub">Set a custom battle JSON for <code>/api/battle/get/&lt;id&gt;</code>.</p>
 
+        <div class="line"><strong>Fetch By Participation</strong></div>
+        <input
+          id="participationLookupId"
+          class="input-field"
+          type="text"
+          spellcheck="false"
+          placeholder="Participation UUID"
+        />
+        <div class="input-row">
+          <button id="fetchParticipationReplay" type="button" class="secondary">Fetch Replay</button>
+        </div>
+        <div id="participationLookupStatus" class="line">Enter a participation ID to load replay JSON.</div>
+
         <textarea id="overrideJson" class="json-input" spellcheck="false" placeholder='{"Id":"...","Seed":123,...}'></textarea>
         <div id="overrideStatus" class="line">No override loaded.</div>
 

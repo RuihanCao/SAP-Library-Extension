@@ -606,6 +606,191 @@ function normalizeBearerToken(value) {
   return raw.replace(/^Bearer\s+/i, "").trim();
 }
 
+function hasReplayBoards(value) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && value.UserBoard
+    && typeof value.UserBoard === "object"
+    && value.OpponentBoard
+    && typeof value.OpponentBoard === "object"
+  );
+}
+
+function extractBattlePayloadFromReplayResponse(payload) {
+  const candidates = [
+    payload,
+    payload?.battle,
+    payload?.Battle,
+    payload?.replay,
+    payload?.Replay,
+    payload?.data,
+    payload?.data?.battle,
+    payload?.data?.Battle,
+    payload?.data?.replay,
+    payload?.data?.Replay
+  ];
+
+  for (const candidate of candidates) {
+    if (!hasReplayBoards(candidate)) {
+      continue;
+    }
+
+    const sanitized = sanitizeBattlePayload(candidate);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+
+  return null;
+}
+
+async function fetchReplayFromSapLibrary(participationId) {
+  const endpoint = `${TARGET_BASE_URL}/api/replays/${participationId}`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      cache: "no-store"
+    });
+
+    const text = await response.text();
+    const payload = parseJsonText(text);
+
+    if (!response.ok) {
+      const detail = getErrorMessageFromPayload(payload);
+      return {
+        ok: false,
+        endpoint,
+        status: response.status,
+        error: detail
+          ? `SAP Library replay lookup failed: HTTP ${response.status}: ${detail}`
+          : `SAP Library replay lookup failed: HTTP ${response.status}`
+      };
+    }
+
+    const battle = extractBattlePayloadFromReplayResponse(payload);
+    if (!battle) {
+      return {
+        ok: false,
+        endpoint,
+        status: response.status,
+        error: "SAP Library replay lookup succeeded but response did not include a battle payload"
+      };
+    }
+
+    return {
+      ok: true,
+      endpoint,
+      status: response.status,
+      battle
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      endpoint,
+      status: null,
+      error: `SAP Library replay lookup failed: ${error && error.message ? error.message : "network_error"}`
+    };
+  }
+}
+
+function findHistoryItemByParticipationId(historyItems, targetParticipationId) {
+  const target = normalizeParticipationId(targetParticipationId);
+  if (!target) {
+    return null;
+  }
+
+  for (const item of historyItems || []) {
+    const itemId = normalizeParticipationId(item?.ParticipationId);
+    if (itemId === target) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
+function extractBattleIdFromHistoryItem(item) {
+  const candidates = [
+    item?.Battle?.Id,
+    item?.BattleId,
+    item?.Battle?.BattleId,
+    item?.WatchResult?.BattleId,
+    item?.WatchResult?.Battle?.Id
+  ];
+
+  for (const candidate of candidates) {
+    const id = normalizeUuid(candidate);
+    if (id) {
+      return id;
+    }
+  }
+
+  return null;
+}
+
+async function fetchBattleById(authToken, apiVersion, battleId) {
+  const token = normalizeBearerToken(authToken);
+  const normalizedBattleId = normalizeUuid(battleId);
+  if (!token) {
+    throw new Error("Battle lookup failed: missing auth token");
+  }
+  if (!normalizedBattleId) {
+    throw new Error("Battle lookup failed: invalid battle ID");
+  }
+
+  const endpoint = `https://api.teamwood.games/0.${apiVersion}/api/battle/get/${normalizedBattleId}`;
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Language: "en"
+    },
+    cache: "no-store"
+  });
+
+  const text = await response.text();
+  const payload = parseJsonText(text);
+
+  if (!response.ok) {
+    const detail = getErrorMessageFromPayload(payload);
+    throw new Error(detail
+      ? `Battle lookup failed: HTTP ${response.status}: ${detail}`
+      : `Battle lookup failed: HTTP ${response.status}`);
+  }
+
+  return {
+    endpoint,
+    payload
+  };
+}
+
+async function resolveSapCredentials(rawEmail, rawPassword) {
+  const providedEmail = typeof rawEmail === "string" ? rawEmail.trim() : "";
+  const providedPassword = typeof rawPassword === "string" ? rawPassword.trim() : "";
+
+  const saved = await storageGet([
+    STORAGE_KEYS.savedSapEmail,
+    STORAGE_KEYS.savedSapPassword
+  ]);
+  const savedEmail = typeof saved[STORAGE_KEYS.savedSapEmail] === "string"
+    ? saved[STORAGE_KEYS.savedSapEmail].trim()
+    : "";
+  const savedPassword = typeof saved[STORAGE_KEYS.savedSapPassword] === "string"
+    ? saved[STORAGE_KEYS.savedSapPassword]
+    : "";
+
+  const email = providedEmail || savedEmail;
+  const canReuseSavedPassword = !providedEmail || providedEmail === savedEmail;
+  const password = providedPassword || (canReuseSavedPassword ? savedPassword : "");
+
+  return {
+    email,
+    password
+  };
+}
+
 async function loginWithSapCredentials(email, password, apiVersion) {
   const endpoint = `https://api.teamwood.games/0.${apiVersion}/api/user/login`;
   const response = await fetch(endpoint, {
@@ -757,22 +942,7 @@ async function persistHistorySyncSummary(summary, apiVersion) {
 async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
   await ensureInitialized();
 
-  const providedEmail = typeof rawEmail === "string" ? rawEmail.trim() : "";
-  const providedPassword = typeof rawPassword === "string" ? rawPassword.trim() : "";
-  const saved = await storageGet([
-    STORAGE_KEYS.savedSapEmail,
-    STORAGE_KEYS.savedSapPassword
-  ]);
-  const savedEmail = typeof saved[STORAGE_KEYS.savedSapEmail] === "string"
-    ? saved[STORAGE_KEYS.savedSapEmail].trim()
-    : "";
-  const savedPassword = typeof saved[STORAGE_KEYS.savedSapPassword] === "string"
-    ? saved[STORAGE_KEYS.savedSapPassword]
-    : "";
-
-  const email = providedEmail || savedEmail;
-  const canReuseSavedPassword = !providedEmail || providedEmail === savedEmail;
-  const password = providedPassword || (canReuseSavedPassword ? savedPassword : "");
+  const { email, password } = await resolveSapCredentials(rawEmail, rawPassword);
   const apiVersion = DEFAULT_SAP_API_VERSION;
 
   if (!email || !password) {
@@ -862,6 +1032,105 @@ async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
   return {
     ...summary,
     state: await buildState()
+  };
+}
+
+async function fetchReplayByParticipation(rawParticipationId, rawEmail, rawPassword) {
+  await ensureInitialized();
+
+  const participationId = normalizeParticipationId(rawParticipationId);
+  if (!participationId) {
+    return { ok: false, error: "Participation ID must be a valid UUID." };
+  }
+
+  const libraryLookup = await fetchReplayFromSapLibrary(participationId);
+  if (libraryLookup.ok) {
+    return {
+      ok: true,
+      source: "sap_library",
+      participationId,
+      endpoint: libraryLookup.endpoint,
+      battleId: normalizeUuid(libraryLookup.battle?.Id),
+      battle: libraryLookup.battle
+    };
+  }
+
+  const { email, password } = await resolveSapCredentials(rawEmail, rawPassword);
+  const apiVersion = DEFAULT_SAP_API_VERSION;
+  if (!email || !password) {
+    return {
+      ok: false,
+      error: `${libraryLookup.error} (fallback requires SAP credentials in popup).`
+    };
+  }
+
+  let loginResult;
+  try {
+    loginResult = await loginWithSapCredentials(email, password, apiVersion);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error && error.message ? error.message : "SAP login failed"
+    };
+  }
+
+  let historyResult;
+  try {
+    historyResult = await fetchHistoryWithToken(loginResult.token, apiVersion);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error && error.message ? error.message : "History sync failed"
+    };
+  }
+
+  const historyItems = Array.isArray(historyResult.historyItems) ? historyResult.historyItems : [];
+  const historyItem = findHistoryItemByParticipationId(historyItems, participationId);
+  if (!historyItem) {
+    return {
+      ok: false,
+      error: `Participation ${participationId} not found in account history.`
+    };
+  }
+
+  const battleId = extractBattleIdFromHistoryItem(historyItem);
+  if (!battleId) {
+    return {
+      ok: false,
+      error: "Found participation in history but could not resolve Battle ID."
+    };
+  }
+
+  let battleResult;
+  try {
+    battleResult = await fetchBattleById(loginResult.token, apiVersion, battleId);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error && error.message ? error.message : "Battle lookup failed"
+    };
+  }
+
+  const battle = sanitizeBattlePayload(battleResult.payload);
+  if (!battle) {
+    return {
+      ok: false,
+      error: "Battle lookup returned invalid JSON payload."
+    };
+  }
+
+  await storageSet({
+    [STORAGE_KEYS.savedSapEmail]: email,
+    [STORAGE_KEYS.savedSapPassword]: password
+  });
+
+  return {
+    ok: true,
+    source: "teamwood_history",
+    participationId,
+    battleId,
+    endpoint: battleResult.endpoint,
+    battle
   };
 }
 
@@ -1124,6 +1393,14 @@ async function handleMessage(message) {
       state: summary.state || await buildState(),
       error: summary.ok ? null : summary.error
     };
+  }
+
+  if (type === "fetch_participation_replay") {
+    return fetchReplayByParticipation(
+      message.participationId,
+      message.email,
+      message.password
+    );
   }
 
   if (type === "get_state") {
