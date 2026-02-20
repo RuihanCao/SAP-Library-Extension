@@ -569,16 +569,75 @@
   }
 
   function collectAbominationSwallowedEntries(rawPet) {
-    const swallowedCandidates = [
-      rawPet?.abominationSwallowedPet1,
-      rawPet?.abominationSwallowedPet2,
-      rawPet?.abominationSwallowedPet3
+    const slotConfigs = [
+      {
+        petKey: "abominationSwallowedPet1",
+        levelKey: "abominationSwallowedPet1Level",
+        belugaKey: "abominationSwallowedPet1BelugaSwallowedPet"
+      },
+      {
+        petKey: "abominationSwallowedPet2",
+        levelKey: "abominationSwallowedPet2Level",
+        belugaKey: "abominationSwallowedPet2BelugaSwallowedPet"
+      },
+      {
+        petKey: "abominationSwallowedPet3",
+        levelKey: "abominationSwallowedPet3Level",
+        belugaKey: "abominationSwallowedPet3BelugaSwallowedPet"
+      }
     ];
-    if (Array.isArray(rawPet?.abominationSwallowedPets)) {
-      swallowedCandidates.push(...rawPet.abominationSwallowedPets);
-    }
 
     const entries = [];
+    for (const slotConfig of slotConfigs) {
+      const swallowedRaw = rawPet?.[slotConfig.petKey];
+      const swallowedPetId = resolvePetIdFromUnknown(swallowedRaw);
+      if (!Number.isFinite(swallowedPetId)) {
+        continue;
+      }
+
+      const swallowedAbilityEnums = getAbilityEnumsForPet(swallowedPetId);
+      const swallowedAbilityEnum = swallowedAbilityEnums.length > 0 ? swallowedAbilityEnums[0] : null;
+      const memoryEntry = buildBelugaSwallowedEntry(swallowedRaw) || { Enu: swallowedPetId };
+
+      const swallowedLevel = toFiniteNumber(rawPet?.[slotConfig.levelKey], NaN);
+      if (Number.isFinite(swallowedLevel)) {
+        memoryEntry.Lvl = clampInt(swallowedLevel, 1, 3);
+      }
+
+      // If this swallowed slot is Beluga, preserve its own swallowed pet chain.
+      if (swallowedPetId === 182) {
+        const belugaSwallowedRaw = rawPet?.[slotConfig.belugaKey] ?? swallowedRaw?.belugaSwallowedPet ?? null;
+        const belugaSwallowedEntry = buildBelugaSwallowedEntry(belugaSwallowedRaw);
+        if (belugaSwallowedEntry) {
+          const belugaAbilityEnums = getAbilityEnumsForPet(182);
+          const belugaLists = {
+            WhiteWhaleAbility: [{ ...belugaSwallowedEntry }]
+          };
+          for (const belugaAbilityEnum of belugaAbilityEnums) {
+            belugaLists[String(belugaAbilityEnum)] = [{ ...belugaSwallowedEntry }];
+          }
+
+          memoryEntry.MiMs = {
+            Lsts: belugaLists
+          };
+        }
+      }
+
+      entries.push({
+        swallowedPetId,
+        swallowedAbilityEnum,
+        memoryEntry
+      });
+    }
+
+    if (entries.length > 0) {
+      return entries;
+    }
+
+    // Fallback path for legacy payloads that only include array form.
+    const swallowedCandidates = Array.isArray(rawPet?.abominationSwallowedPets)
+      ? rawPet.abominationSwallowedPets
+      : [];
     for (const swallowed of swallowedCandidates) {
       const swallowedPetId = resolvePetIdFromUnknown(swallowed);
       if (!Number.isFinite(swallowedPetId)) {
@@ -588,7 +647,8 @@
       const swallowedAbilityEnums = getAbilityEnumsForPet(swallowedPetId);
       entries.push({
         swallowedPetId,
-        swallowedAbilityEnum: swallowedAbilityEnums.length > 0 ? swallowedAbilityEnums[0] : null
+        swallowedAbilityEnum: swallowedAbilityEnums.length > 0 ? swallowedAbilityEnums[0] : null,
+        memoryEntry: buildBelugaSwallowedEntry(swallowed) || { Enu: swallowedPetId }
       });
     }
 
@@ -743,7 +803,7 @@
       if (!Array.isArray(lists[key])) {
         lists[key] = [];
       }
-      lists[key].push({ Enu: entry.swallowedPetId });
+      lists[key].push(entry.memoryEntry || { Enu: entry.swallowedPetId });
     }
 
     if (Object.keys(lists).length === 0) {
