@@ -9,12 +9,38 @@
   let latestOverrideConfig = EMPTY_OVERRIDE_CONFIG;
   const pendingForceFetch = new Map();
   let overrideRefreshTimer = null;
+  let extensionContextGone = false;
+
+  function isContextInvalidatedError(errorLike) {
+    const text = String(errorLike || "").toLowerCase();
+    return text.includes("extension context invalidated")
+      || text.includes("context invalidated")
+      || text.includes("receiving end does not exist");
+  }
+
+  function markExtensionContextGone(errorLike) {
+    if (!isContextInvalidatedError(errorLike)) {
+      return;
+    }
+    extensionContextGone = true;
+    if (overrideRefreshTimer !== null) {
+      window.clearInterval(overrideRefreshTimer);
+      overrideRefreshTimer = null;
+    }
+  }
 
   function injectPageHook() {
-    const script = document.createElement("script");
-    script.src = chrome.runtime.getURL("page_hook.js");
-    script.onload = () => script.remove();
-    (document.head || document.documentElement).appendChild(script);
+    if (extensionContextGone) {
+      return;
+    }
+    try {
+      const script = document.createElement("script");
+      script.src = chrome.runtime.getURL("page_hook.js");
+      script.onload = () => script.remove();
+      (document.head || document.documentElement).appendChild(script);
+    } catch (error) {
+      markExtensionContextGone(error && error.message ? error.message : error);
+    }
   }
 
   function postToPage(payload) {
@@ -23,15 +49,25 @@
 
   function sendMessageToWorker(payload) {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage(payload, (response) => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          resolve({ ok: false, error: error.message });
-          return;
-        }
+      if (extensionContextGone) {
+        resolve({ ok: false, error: "Extension context invalidated" });
+        return;
+      }
+      try {
+        chrome.runtime.sendMessage(payload, (response) => {
+          const error = chrome.runtime.lastError;
+          if (error) {
+            markExtensionContextGone(error.message);
+            resolve({ ok: false, error: error.message });
+            return;
+          }
 
-        resolve(response || { ok: false, error: "No response from extension worker" });
-      });
+          resolve(response || { ok: false, error: "No response from extension worker" });
+        });
+      } catch (error) {
+        markExtensionContextGone(error && error.message ? error.message : error);
+        resolve({ ok: false, error: error && error.message ? error.message : String(error) });
+      }
     });
   }
 
@@ -79,17 +115,27 @@
   }
 
   async function refreshOverrideConfig() {
-    const response = await sendMessageToWorker({ type: "get_battle_override_config" });
-    if (response?.ok) {
-      latestOverrideConfig = normalizeOverrideConfig(response.config);
-    } else {
-      latestOverrideConfig = EMPTY_OVERRIDE_CONFIG;
+    if (extensionContextGone) {
+      return;
     }
-    pushOverrideConfig();
+    try {
+      const response = await sendMessageToWorker({ type: "get_battle_override_config" });
+      if (response?.ok) {
+        latestOverrideConfig = normalizeOverrideConfig(response.config);
+      } else {
+        latestOverrideConfig = EMPTY_OVERRIDE_CONFIG;
+        markExtensionContextGone(response?.error);
+      }
+      pushOverrideConfig();
+    } catch (error) {
+      latestOverrideConfig = EMPTY_OVERRIDE_CONFIG;
+      markExtensionContextGone(error && error.message ? error.message : error);
+      pushOverrideConfig();
+    }
   }
 
   function startOverrideRefreshLoop() {
-    if (overrideRefreshTimer !== null) {
+    if (extensionContextGone || overrideRefreshTimer !== null) {
       return;
     }
 
@@ -99,12 +145,20 @@
   }
 
   function sendToWorker(payload) {
-    chrome.runtime.sendMessage(payload, () => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        // Worker can be sleeping during navigation. Ignore transient errors.
-      }
-    });
+    if (extensionContextGone) {
+      return;
+    }
+    try {
+      chrome.runtime.sendMessage(payload, () => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          markExtensionContextGone(error.message);
+          // Worker can be sleeping during navigation. Ignore transient errors.
+        }
+      });
+    } catch (error) {
+      markExtensionContextGone(error && error.message ? error.message : error);
+    }
   }
 
   injectPageHook();

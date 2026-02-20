@@ -208,7 +208,6 @@ function sanitizeBattlePayload(value) {
     return null;
   }
 }
-
 function normalizeApiVersion(value) {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -324,7 +323,6 @@ async function ensureInitialized() {
   if (!(STORAGE_KEYS.battleOverrideBattle in result)) {
     updates[STORAGE_KEYS.battleOverrideBattle] = null;
   }
-
   if (!(STORAGE_KEYS.historySyncLast in result)) {
     updates[STORAGE_KEYS.historySyncLast] = null;
   }
