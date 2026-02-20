@@ -1324,7 +1324,7 @@
         unknownPackWarnings,
         unknownToyWarnings,
         {
-          reverseInputOrder: false,
+          reverseInputOrder: true,
           turn: state.turn,
           goldSpent: state.playerGoldSpent,
           rollAmount: state.playerRollAmount,
