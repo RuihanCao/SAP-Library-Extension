@@ -568,7 +568,7 @@
       ? FALLBACK_ABILITY_IDS_BY_PET_ID[abilityMapKey]
       : [];
 
-    return uniqueNumbers([...mapped, ...fallback]);
+    return uniqueNumbers([...mapped, ...fallback]).filter((abilityEnum) => !(petId === 389 && abilityEnum === 794));
   }
 
   function collectAbominationSwallowedEntries(rawPet) {
