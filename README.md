@@ -28,6 +28,8 @@ Chrome extension that syncs finished Super Auto Pets participation IDs to SAP Li
 4. Click `Open My Profile` after your player ID is detected.
 5. Use `Replay Injection` in the popup to paste/save a battle JSON and toggle injection without editing files.
 
+History sync is pinned to SAP API `0.46` by default, while replay injection still auto-detects the live API version from SAP traffic and falls back to `0.46` if no version has been observed yet.
+
 ## Replay Injection (No Proxy)
 
 The extension can override `GET /api/battle/get/{battleId}` directly in-page.

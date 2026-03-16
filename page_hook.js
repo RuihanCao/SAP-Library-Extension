@@ -9,7 +9,7 @@
   const JSON_HEADERS = {
     "Content-Type": "application/json; charset=utf-8"
   };
-  const FALLBACK_API_VERSION = "0.45";
+  const FALLBACK_API_VERSION = "0.46";
 
   const battleOverride = {
     enabled: false,
