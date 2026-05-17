@@ -2,7 +2,7 @@
 using BepInEx.Logging;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(PackViewerInVersus.MelonPackViewerInVersusMod), "Pack Viewer In Versus", "0.1.0", "SAP Library Extension")]
+[assembly: MelonInfo(typeof(PackViewerInVersus.MelonPackViewerInVersusMod), "Pack Viewer In Versus", "0.1.1", "SAP Library Extension")]
 [assembly: MelonGame("Team Wood", "Super Auto Pets")]
 
 namespace PackViewerInVersus;

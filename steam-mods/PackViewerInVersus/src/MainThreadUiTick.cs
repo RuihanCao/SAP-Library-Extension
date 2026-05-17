@@ -29,6 +29,7 @@ internal static class MainThreadUiTick
             var now = Time.realtimeSinceStartup;
             LogHookContextOnce(hookContext);
             OverlayButtonInstaller.ResetIfDestroyed();
+            OpponentMiniInfoRenderer.EnsureRendered(Logger);
 
             if (DebugConfig.IsEnabled("floatingButton", defaultValue: false) && now >= _nextInstallAt)
             {
