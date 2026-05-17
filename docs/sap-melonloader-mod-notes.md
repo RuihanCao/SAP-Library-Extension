@@ -230,6 +230,51 @@ For SAP MelonLoader to be considered fully validated, all of these must be true 
 
 Creating `MelonLoader/Latest.log` is not enough. A bootstrap-only log means mods cannot load yet.
 
+## 2026-05-17 MelonLoader Build Target
+
+A MelonLoader-specific project now exists:
+
+```sh
+/Users/patrickliu/Desktop/Startups/SAP-Library-Extension/steam-mods/PackViewerInVersus.MelonLoader
+```
+
+It reuses the loader-neutral PackViewer source files and adds:
+
+- `MelonPackViewerInVersusMod`: `MelonMod` entrypoint.
+- `MelonLoaderCompat`: small shims for the BepInEx logging/path APIs used by the shared source.
+- `build-and-install.sh`: builds `PackViewerInVersus.dll` and installs it to SAP's `Mods` folder.
+
+Build/install command:
+
+```sh
+cd /Users/patrickliu/Desktop/Startups/SAP-Library-Extension
+./steam-mods/PackViewerInVersus.MelonLoader/build-and-install.sh
+```
+
+Result:
+
+```text
+PackViewerInVersus.MelonLoader -> steam-mods/PackViewerInVersus.MelonLoader/bin/Release/net6.0/PackViewerInVersus.dll
+Installed /Users/patrickliu/Library/Application Support/Steam/steamapps/common/Super Auto Pets/Mods/PackViewerInVersus.dll
+```
+
+Build status:
+
+- Succeeds against local MelonLoader `0.7.3.0`.
+- Emits one expected architecture warning because the local macOS MelonLoader reference is `AMD64` while the mod assembly is `MSIL`.
+
+Validation status:
+
+- Static layout checks pass.
+- `MelonLoader.Bootstrap.dylib` injects and logs `Symbol Redirect Attached`.
+- Runtime redirect still does not fire.
+- HostFXR / managed MelonLoader does not start.
+- `PackViewerInVersus` does not load.
+
+Current conclusion:
+
+The MelonLoader DLL can now be produced for users who already have a working MelonLoader SAP setup, especially Windows users. The local macOS SAP path remains blocked before managed mod loading, so no MelonLoader mod can run here yet.
+
 Repeatable validation script:
 
 ```sh

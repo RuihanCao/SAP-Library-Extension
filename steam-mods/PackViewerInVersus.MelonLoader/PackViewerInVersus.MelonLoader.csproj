@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>PackViewerInVersus</AssemblyName>
+    <RootNamespace>PackViewerInVersus</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);MELONLOADER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../PackViewerInVersus/src/DebugOverlayInstaller.cs" Link="src/Shared/DebugOverlayInstaller.cs" />
+    <Compile Include="../PackViewerInVersus/src/DiagnosticsUtility.cs" Link="src/Shared/DiagnosticsUtility.cs" />
+    <Compile Include="../PackViewerInVersus/src/MainThreadUiTick.cs" Link="src/Shared/MainThreadUiTick.cs" />
+    <Compile Include="../PackViewerInVersus/src/OpponentPackIconClickRouter.cs" Link="src/Shared/OpponentPackIconClickRouter.cs" />
+    <Compile Include="../PackViewerInVersus/src/OverlayButtonInstaller.cs" Link="src/Shared/OverlayButtonInstaller.cs" />
+    <Compile Include="../PackViewerInVersus/src/PackViewerLauncher.cs" Link="src/Shared/PackViewerLauncher.cs" />
+    <Compile Include="../PackViewerInVersus/src/ReflectionUtils.cs" Link="src/Shared/ReflectionUtils.cs" />
+    <Compile Include="../PackViewerInVersus/src/UnityObjectScanner.cs" Link="src/Shared/UnityObjectScanner.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(MELONLOADER_DIR)/net6/MelonLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(MELONLOADER_DIR)/net6/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(MELONLOADER_DIR)/net6/Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(UNITY_REFS_DIR)/Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(UNITY_REFS_DIR)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SpacewoodCore2">
+      <HintPath>$(UNITY_REFS_DIR)/SpacewoodCore2.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

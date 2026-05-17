@@ -2,7 +2,7 @@
 
 Client-side Super Auto Pets quality-of-life mod for Steam SAP.
 
-This is a BepInEx 6 IL2CPP mod. It is not a MelonLoader mod.
+The validated build is a BepInEx 6 IL2CPP mod. A MelonLoader build target now also exists for community testing, but macOS SAP + MelonLoader still has a loader-level managed-startup blocker on this machine.
 
 ## What It Does
 
@@ -74,7 +74,13 @@ steam-mods/PackViewerInVersus/bin/Release/net6.0/PackViewerInVersus.dll
 
 ## Compatibility Notes
 
-MelonLoader users should not try to run this DLL directly. A MelonLoader port would need a separate entrypoint/logging/bootstrap layer, although the core idea is the same:
+MelonLoader users should not try to run the BepInEx DLL directly. Use the separate MelonLoader project instead:
+
+```text
+steam-mods/PackViewerInVersus.MelonLoader
+```
+
+That build has its own Melon entrypoint/logging/bootstrap layer and reuses the same core feature code:
 
 - find `HangarScoreboardEntry`
 - read `entry.Opponent.Pack`
