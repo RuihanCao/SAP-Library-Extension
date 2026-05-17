@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace PackViewerInVersus;
 
-[BepInPlugin("sap.library.pack-viewer-in-versus", "Pack Viewer In Versus", "0.1.1")]
+[BepInPlugin("sap.library.pack-viewer-in-versus", "Pack Viewer In Versus", "0.1.2")]
 public sealed class PackViewerInVersusMod : BasePlugin
 {
     private Harmony _harmony;
