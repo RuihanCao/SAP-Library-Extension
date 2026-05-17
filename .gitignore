@@ -1,2 +1,6 @@
 *.zip
 .venv/
+steam-mods/**/bin/
+steam-mods/**/obj/
+steam-mods/**/*.dll
+steam-mods/**/*.dylib
