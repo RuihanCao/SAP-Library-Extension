@@ -21,7 +21,7 @@ const LEGACY_STORAGE_KEYS = {
 const TARGET_BASE_URL = "https://sap-library.vercel.app";
 const UPLOAD_BATCH_SIZE = 25;
 const MAX_UPLOADED_IDS = 5000;
-const DEFAULT_SAP_API_VERSION = "46";
+const DEFAULT_SAP_API_VERSION = "48"; //api version 0.48
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_BATTLE_ID = "00000000-0000-4000-8000-000000000000";
@@ -965,7 +965,18 @@ async function uploadPending(trigger) {
   }
 
   const successSet = new Set(successfulIds);
-  const nextPending = pending.filter((id) => !successSet.has(id));
+  const failedSet = new Set(failedReasonById.keys());
+  const nextPending = pending.filter((id) => {
+    if (successSet.has(id)) {
+      return false;
+    }
+
+    if (trigger === "manual" && failedSet.has(id)) {
+      return false;
+    }
+
+    return true;
+  });
 
   const uploaded = uniqueIds([
     ...successfulIds,
