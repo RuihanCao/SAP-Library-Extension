@@ -8,7 +8,7 @@ Chrome extension that syncs finished Super Auto Pets participation IDs to SAP Li
 - Captures `ParticipationId` from:
   - `POST /api/arena/watch`
   - `POST /api/versus/watch`
-  - `POST /api/history/fetch`
+  - `GET /api/history/fetch`
 - Only queues IDs for finished games (watch outcome win/loss and finished history entries).
 - Uploads queued IDs automatically using `POST /api/replays` (one replay per request).
 - Captures your player ID from game/history JSON and enables an "Open My Profile" shortcut.

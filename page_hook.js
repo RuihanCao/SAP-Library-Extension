@@ -5,7 +5,7 @@
   const WATCH_PATH = /\/0\.\d+\/api\/(arena\/watch|versus\/watch)$/i;
   const HISTORY_PATH = /\/0\.\d+\/api\/history\/fetch$/i;
   const BATTLE_GET_PATH = /\/0\.\d+\/api\/battle\/get\/([0-9a-f-]{36})$/i;
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const JSON_HEADERS = {
     "Content-Type": "application/json; charset=utf-8"
   };
@@ -254,7 +254,12 @@
   }
 
   function normalizeParticipationId(value) {
-    return normalizeUuid(value);
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const text = String(value).trim();
+    return text || null;
   }
 
   function normalizePlayerId(value) {

@@ -21,14 +21,50 @@ const LEGACY_STORAGE_KEYS = {
 const TARGET_BASE_URL = "https://sap-library.vercel.app";
 const UPLOAD_BATCH_SIZE = 25;
 const MAX_UPLOADED_IDS = 5000;
-const DEFAULT_SAP_API_VERSION = "48"; //api version 0.48
+const DEFAULT_SAP_API_VERSION = "48"; // API version 0.48.
+const DEBUG_MODE = false;
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_BATTLE_ID = "00000000-0000-4000-8000-000000000000";
 const DEFAULT_USER_ID = "11111111-1111-4111-8111-111111111111";
 const DEFAULT_OPPONENT_ID = "22222222-2222-4222-8222-222222222222";
 
 let uploadPromise = null;
+
+function debugLog(message, details) {
+  if (!DEBUG_MODE) {
+    return;
+  }
+
+  if (details === undefined) {
+    console.log(`[SAP Library Uploader] ${message}`);
+    return;
+  }
+
+  console.log(`[SAP Library Uploader] ${message}`, details);
+}
+
+function debugError(message, details) {
+  if (!DEBUG_MODE) {
+    return;
+  }
+
+  if (details === undefined) {
+    console.error(`[SAP Library Uploader] ${message}`);
+    return;
+  }
+
+  console.error(`[SAP Library Uploader] ${message}`, details);
+}
+
+function debugResponseText(text) {
+  if (typeof text !== "string") {
+    return "";
+  }
+
+  const limit = 1000;
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
 
 function storageGet(keys) {
   return new Promise((resolve) => {
@@ -53,7 +89,12 @@ function normalizeUuid(value) {
 }
 
 function normalizeParticipationId(value) {
-  return normalizeUuid(value);
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  return text || null;
 }
 
 function normalizePlayerId(value) {
@@ -444,6 +485,12 @@ async function enqueueParticipationIds(rawIds, source, rawPlayerId) {
   const incomingIds = sanitizeParticipationIds(rawIds);
   const detectedPlayerId = normalizePlayerId(rawPlayerId);
 
+  debugLog("Queueing participation IDs", {
+    source: source || "unknown",
+    participationIds: incomingIds,
+    playerId: detectedPlayerId
+  });
+
   const result = await storageGet([
     STORAGE_KEYS.pending,
     STORAGE_KEYS.uploaded,
@@ -494,6 +541,15 @@ async function enqueueParticipationIds(rawIds, source, rawPlayerId) {
       void triggerUpload("auto");
     }
   }
+
+  debugLog("Participation queue updated", {
+    source: source || "unknown",
+    participationIds: incomingIds,
+    added,
+    skipped,
+    pendingCount: pending.length,
+    retryRequired
+  });
 
   return {
     ok: true,
@@ -561,6 +617,56 @@ function collectHistoryParticipationIds(historyItems, onlyFinished) {
   return ids;
 }
 
+function summarizeExcludedHistoryItems(historyItems) {
+  return historyItems
+    .filter((item) => !isFinishedHistoryItem(item))
+    .map((item) => ({
+      participationId: normalizeParticipationId(item?.ParticipationId),
+      version: item?.Version ?? item?.Battle?.Version ?? null,
+      outcome: item?.Outcome ?? null,
+      battleOutcome: item?.Battle?.Outcome ?? null,
+      victories: item?.Victories ?? null,
+      lives: item?.Lives ?? null,
+      itemKeys: isPlainObject(item) ? Object.keys(item).sort() : [],
+      battleKeys: isPlainObject(item?.Battle) ? Object.keys(item.Battle).sort() : []
+    }));
+}
+
+function summarizeOmittedParticipationIds(historyItems) {
+  const omitted = [];
+  const seen = new Set();
+
+  historyItems.forEach((item, index) => {
+    const rawParticipationId = item?.ParticipationId ?? null;
+    const participationId = normalizeParticipationId(rawParticipationId);
+    let reason = null;
+
+    if (!rawParticipationId) {
+      reason = "missing_participation_id";
+    } else if (!participationId) {
+      reason = "invalid_participation_id";
+    } else if (seen.has(participationId)) {
+      reason = "duplicate_participation_id";
+    }
+
+    if (participationId) {
+      seen.add(participationId);
+    }
+
+    if (reason) {
+      omitted.push({
+        index,
+        reason,
+        rawParticipationId,
+        version: item?.Version ?? item?.Battle?.Version ?? null,
+        itemKeys: isPlainObject(item) ? Object.keys(item).sort() : []
+      });
+    }
+  });
+
+  return omitted;
+}
+
 function parseJsonText(text) {
   if (!text) {
     return null;
@@ -608,6 +714,8 @@ function normalizeBearerToken(value) {
 
 async function loginWithSapCredentials(email, password, apiVersion) {
   const endpoint = `https://api.teamwood.games/0.${apiVersion}/api/user/login`;
+  debugLog("History sync login request", { endpoint, apiVersion });
+
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -622,9 +730,19 @@ async function loginWithSapCredentials(email, password, apiVersion) {
 
   const text = await response.text();
   const payload = parseJsonText(text);
+  debugLog("History sync login response", {
+    endpoint,
+    status: response.status,
+    ok: response.ok
+  });
 
   if (!response.ok) {
     const detail = getErrorMessageFromPayload(payload);
+    debugError("History sync login failed", {
+      endpoint,
+      status: response.status,
+      detail
+    });
     throw new Error(detail ? `SAP login failed: HTTP ${response.status}: ${detail}` : `SAP login failed: HTTP ${response.status}`);
   }
 
@@ -645,7 +763,12 @@ async function fetchHistoryWithToken(authToken, apiVersion) {
     throw new Error("History sync failed: missing auth token");
   }
 
+  // Get is the current correct method.
   const endpointCandidates = [
+    {
+      method: "GET",
+      path: "/api/history/fetch"
+    },
     {
       method: "POST",
       path: "/api/history/fetch",
@@ -657,17 +780,9 @@ async function fetchHistoryWithToken(authToken, apiVersion) {
       body: {}
     },
     {
-      method: "GET",
-      path: "/api/history/fetch"
-    },
-    {
       method: "POST",
       path: "/api/history/get",
       body: { Version: Number(apiVersion) }
-    },
-    {
-      method: "GET",
-      path: "/api/history/get"
     }
   ];
 
@@ -689,9 +804,21 @@ async function fetchHistoryWithToken(authToken, apiVersion) {
     }
 
     try {
+      debugLog("History sync request", {
+        endpoint,
+        method: candidate.method,
+        requestBody: candidate.body ?? null
+      });
+
       const response = await fetch(endpoint, requestOptions);
       const text = await response.text();
       const payload = parseJsonText(text);
+      debugLog("History sync response", {
+        endpoint,
+        method: candidate.method,
+        status: response.status,
+        ok: response.ok
+      });
 
       if (response.status === 401 || response.status === 403) {
         throw new Error(`History sync failed: SAP auth rejected (HTTP ${response.status})`);
@@ -706,8 +833,20 @@ async function fetchHistoryWithToken(authToken, apiVersion) {
       const historyItems = Array.isArray(payload?.History) ? payload.History : null;
       if (!historyItems) {
         lastError = `${candidate.method} ${candidate.path} -> invalid history payload`;
+        debugError("History sync returned an invalid payload", {
+          endpoint,
+          method: candidate.method,
+          status: response.status,
+          responseText: debugResponseText(text)
+        });
         continue;
       }
+
+      debugLog("History sync fetched items", {
+        endpoint,
+        method: candidate.method,
+        itemCount: historyItems.length
+      });
 
       return {
         endpoint,
@@ -720,6 +859,11 @@ async function fetchHistoryWithToken(authToken, apiVersion) {
         throw error;
       }
       lastError = `${candidate.method} ${candidate.path} -> ${error && error.message ? error.message : "network_error"}`;
+      debugError("History sync request failed", {
+        endpoint,
+        method: candidate.method,
+        error: error && error.message ? error.message : "network_error"
+      });
     }
   }
 
@@ -775,6 +919,13 @@ async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
   const password = providedPassword || (canReuseSavedPassword ? savedPassword : "");
   const apiVersion = DEFAULT_SAP_API_VERSION;
 
+  debugLog("Starting history sync", {
+    trigger,
+    apiVersion,
+    hasEmail: Boolean(email),
+    hasPassword: Boolean(password)
+  });
+
   if (!email || !password) {
     const summary = buildHistoryFailureSummary(
       trigger,
@@ -792,6 +943,11 @@ async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
   try {
     loginResult = await loginWithSapCredentials(email, password, apiVersion);
   } catch (error) {
+    debugError("History sync stopped during login", {
+      trigger,
+      apiVersion,
+      error: error && error.message ? error.message : "SAP login failed"
+    });
     const summary = buildHistoryFailureSummary(
       trigger,
       apiVersion,
@@ -811,6 +967,11 @@ async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
   try {
     historyResult = await fetchHistoryWithToken(loginResult.token, apiVersion);
   } catch (error) {
+    debugError("History sync stopped while fetching history", {
+      trigger,
+      apiVersion,
+      error: error && error.message ? error.message : "History sync failed"
+    });
     const summary = buildHistoryFailureSummary(
       trigger,
       apiVersion,
@@ -831,8 +992,10 @@ async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
   const finishedIds = collectHistoryParticipationIds(historyItems, true);
   const playerId = extractHistoryPlayerId(historyItems);
 
-  console.log("SAP Library Uploader: History sync fetched participation IDs:", fetchedIds);
-  console.log("SAP Library Uploader: History sync finished participation IDs:", finishedIds);
+  debugLog("History sync fetched participation IDs", fetchedIds);
+  debugLog("History sync finished participation IDs", finishedIds);
+  debugLog("History sync omitted participation IDs", summarizeOmittedParticipationIds(historyItems));
+  debugLog("History sync excluded non-finished items", summarizeExcludedHistoryItems(historyItems));
 
   const enqueueResult = await enqueueParticipationIds(finishedIds, "history_sync_credentials", playerId);
 
@@ -859,6 +1022,8 @@ async function syncHistoryWithCredentials(rawEmail, rawPassword, trigger) {
     [STORAGE_KEYS.savedSapPassword]: password
   });
 
+  debugLog("History sync completed", summary);
+
   return {
     ...summary,
     state: await buildState()
@@ -877,6 +1042,10 @@ async function uploadPending(trigger) {
 
   const retryRequired = Boolean(current[STORAGE_KEYS.retryRequired]);
   if (retryRequired && trigger !== "manual") {
+    debugLog("Automatic upload paused until manual retry", {
+      trigger,
+      pendingCount: uniqueIds(current[STORAGE_KEYS.pending]).length
+    });
     return {
       ok: false,
       status: "retry_required",
@@ -909,11 +1078,18 @@ async function uploadPending(trigger) {
     });
 
     await updateBadge();
+    debugLog("Upload requested with an empty queue", summary);
     return summary;
   }
 
   const batch = pending.slice(0, UPLOAD_BATCH_SIZE);
   const endpoint = `${TARGET_BASE_URL}/api/replays`;
+
+  debugLog("Starting upload batch", {
+    trigger,
+    endpoint,
+    participationIds: batch
+  });
 
   const failedReasonById = new Map();
   const successfulIds = [];
@@ -922,6 +1098,11 @@ async function uploadPending(trigger) {
 
   for (const participationId of batch) {
     try {
+      debugLog("Uploading participation ID", {
+        participationId,
+        endpoint
+      });
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -942,12 +1123,27 @@ async function uploadPending(trigger) {
           ? `HTTP ${response.status}: ${reasonFromBody}`
           : `HTTP ${response.status}`;
         failedReasonById.set(participationId, reason);
+        debugError("Upload failed for participation ID", {
+          participationId,
+          endpoint,
+          status: response.status,
+          reason,
+          responseText: debugResponseText(responseText)
+        });
         continue;
       }
 
       const status = typeof payload?.status === "string" ? payload.status : "";
       if (status === "failed") {
-        failedReasonById.set(participationId, payload?.error || "failed");
+        const reason = payload?.error || "failed";
+        failedReasonById.set(participationId, reason);
+        debugError("Upload response reported failure for participation ID", {
+          participationId,
+          endpoint,
+          status: response.status,
+          reason,
+          responseText: debugResponseText(responseText)
+        });
         continue;
       }
 
@@ -958,9 +1154,20 @@ async function uploadPending(trigger) {
       }
 
       successfulIds.push(participationId);
+      debugLog("Upload succeeded for participation ID", {
+        participationId,
+        endpoint,
+        status,
+        replayId: payload?.replayId || null
+      });
     } catch (error) {
       const message = error && error.message ? error.message : "network_error";
       failedReasonById.set(participationId, message);
+      debugError("Upload request threw for participation ID", {
+        participationId,
+        endpoint,
+        error: message
+      });
     }
   }
 
@@ -1004,6 +1211,10 @@ async function uploadPending(trigger) {
 
   const failedCount = failedReasonById.size;
   const retryNeeded = failedCount > 0;
+  const failedEntries = Array.from(failedReasonById, ([participationId, reason]) => ({
+    participationId,
+    reason
+  }));
   const summary = {
     ok: !retryNeeded,
     status: retryNeeded ? "partial_retry_required" : "uploaded",
@@ -1015,6 +1226,10 @@ async function uploadPending(trigger) {
     inserted: insertedCount,
     skipped: skippedCount,
     remaining: nextPending.length,
+    error: failedEntries.length > 0
+      ? `${failedEntries[0].participationId}: ${failedEntries[0].reason}`
+      : null,
+    failedEntries,
     at: now
   };
 
@@ -1027,6 +1242,7 @@ async function uploadPending(trigger) {
   });
 
   await updateBadge();
+  debugLog("Upload batch completed", summary);
   return summary;
 }
 
