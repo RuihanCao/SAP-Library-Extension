@@ -1053,10 +1053,11 @@
       }
     }
 
-    // Observed in live battle payloads: toy ability enum is offset by +32.
-    // Example: 580 -> 612, 594 -> 626.
     if (Number.isFinite(toyId)) {
-      return Math.trunc(toyId + 32);
+      const mappedAbilityEnum = maps?.toyAbilityEnumsByToyId?.[String(Math.trunc(toyId))];
+      if (Number.isFinite(mappedAbilityEnum)) {
+        return Math.trunc(mappedAbilityEnum);
+      }
     }
 
     return null;
