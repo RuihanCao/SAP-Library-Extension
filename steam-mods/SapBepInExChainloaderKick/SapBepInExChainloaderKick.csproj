@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>SapBepInExChainloaderKick</AssemblyName>
+    <RootNamespace>SapBepInExChainloaderKick</RootNamespace>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx.Core">
+      <HintPath>$(BEPINEX_CORE_DIR)/BepInEx.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx.Preloader.Core">
+      <HintPath>$(BEPINEX_CORE_DIR)/BepInEx.Preloader.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP">
+      <HintPath>$(BEPINEX_CORE_DIR)/BepInEx.Unity.IL2CPP.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

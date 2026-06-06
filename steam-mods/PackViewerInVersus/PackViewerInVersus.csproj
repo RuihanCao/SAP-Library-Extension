@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>PackViewerInVersus</AssemblyName>
+    <RootNamespace>PackViewerInVersus</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tools/**/*.cs" />
+    <None Include="tools/**/*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx.Core">
+      <HintPath>$(BEPINEX_CORE_DIR)/BepInEx.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP">
+      <HintPath>$(BEPINEX_CORE_DIR)/BepInEx.Unity.IL2CPP.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BEPINEX_CORE_DIR)/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(BEPINEX_CORE_DIR)/Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.RuntimeDetour">
+      <HintPath>$(BEPINEX_CORE_DIR)/MonoMod.RuntimeDetour.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(UNITY_REFS_DIR)/Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(UNITY_REFS_DIR)/UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(UNITY_REFS_DIR)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SpacewoodCore2">
+      <HintPath>$(UNITY_REFS_DIR)/SpacewoodCore2.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
