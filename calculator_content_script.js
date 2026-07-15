@@ -121,6 +121,10 @@
   const FALLBACK_ABILITY_IDS_BY_PET_ID = {
     "338": [368],
     "373": [403],
+    // Giant Otter's second ability (806) reclaims the pre-battle buff after the
+    // first non-jump attack. Live payloads carry [440, 806], but the map source
+    // only lists 440, so the retract never fired in injected replays.
+    "410": [440, 806],
     "635": [669],
     // Sarcastic Fringehead has multiple abilities in live payloads.
     "763": [853, 970]
